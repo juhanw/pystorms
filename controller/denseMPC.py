@@ -132,7 +132,11 @@ class denseMPC:
         q = cvxopt.matrix(self.f)
         G = cvxopt.matrix(self.Aieq)
         h = cvxopt.matrix(self.bieq)
-        sol = cvxopt.solvers.qp(P,q,G,h)
+        try:
+            sol = cvxopt.solvers.qp(P,q,G,h)
+            u0 = np.asarray(sol['x'][:self.m])
+        except:
+            print("Error Constraints!") # why there is no Ulb/Uub effect???
+            u0 = np.zeros((self.m,1))
         
-        u0 = sol['x'][:self.m]
         return u0
