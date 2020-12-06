@@ -49,49 +49,22 @@ class denseMPC:
         self.R = la.block_diag(*([R]*nh ))
             
         if qlin == None:
-            qlin = np.ones((self.n,1))
+            qlin = np.zeros((self.n,1))
         if np.size(qlin) == self.n:
             self.qlin = np.tile(qlin.reshape(self.n,1),(self.nh,1))
         elif np.size(qlin) == self.n*(self.nh):
-            self.qlin = qlin.reshape(self.m*(self.nh),1) 
+            self.qlin = qlin.reshape(self.n*(self.nh),1) 
 
         if ulin == None:
-            ulin = 0.01*np.ones((self.m,1))
+            ulin = 0.01*np.zeros((self.m,1))
         if np.size(ulin) == self.m:
             self.ulin = np.tile(ulin.reshape(self.m,1),(self.nh,1))
         elif np.size(ulin) == self.m * self.nh:
             self.ulin = ulin.reshape(self.m*self.nh,1)
 
-        # set MPC constraints
-        # if np.size(Ulb) == self.m:
-        #     self.Ulb = np.tile(Ulb.reshape(self.m,1),(self.nh,1))
-        # elif np.size(Ulb) == self.m * self.nh:
-        #     self.Ulb = Ulb.reshape(self.m*self.nh,1)
-
-        # if np.size(Uub) == self.m:
-        #     self.Uub = np.tile(Uub.reshape(self.m,1),(self.nh,1))
-        # elif np.size(Uub) == self.m * self.nh:
-        #     self.Uub = Uub.reshape(self.m*self.nh,1)
-
-        # if np.size(Zub) > 0:            
-        #     if np.size(Zub) == self.nk:
-        #         self.Zub = np.tile(Zub.reshape(self.nk,1),(self.nh,1))
-        #     elif np.size(Zub) == self.nk * (self.nh):
-        #         self.Zub = Zub.reshape(self.m*(self.nh),1)
-        # else:
-        #     self.Zub = np.zeros((self.m*(self.nh),1))
-
-        # if np.size(Zlb) > 0:           
-        #     if np.size(Zlb) == self.nk:
-        #         self.Zlb = np.tile(Zlb.reshape(self.nk,1),(self.nh,1))
-        #     elif np.size(Zlb) == self.nk * (self.nh):
-        #         self.Zlb = Zlb.reshape(self.m*(self.nh ),1)
-        # else:
-        #     self.Zlb = np.zeros((self.m*(self.nh ),1))
-
         if np.size(Ulb) == self.m:
             self.Au = -np.eye(self.m)
-            self.bu = -Ulb
+            self.bu = -1*Ulb
         else:
             self.Au = np.zeros((self.m,self.m))
             self.bu = np.zeros((self.m,1))
@@ -103,10 +76,9 @@ class denseMPC:
             self.Au = np.vstack((self.Au,np.zeros((self.m,self.m)) ))
             self.bu = np.vstack((self.bu,np.zeros((self.m,1))))
 
-
         if np.size(Zlb) == self.nk:
             self.Az = -np.eye(self.nk)
-            self.bz = -Zlb
+            self.bz = -1*Zlb
         else:
             self.Az = np.zeros((self.nk,self.nk))
             self.bz = np.zeros((self.nk,1))
@@ -119,11 +91,8 @@ class denseMPC:
             self.bz = np.vstack((self.bz,np.zeros((self.nk,1))))
 
     def getMPC(self, z0,A,B,C,xr = None):
-        # get the u0
-        # QP_solver lib: https://pypi.org/project/qpsolvers/
-        # LQR: https://github.com/i-abr/mpc-koopman/blob/master/cart_pole.ipynb
 
-        # set MPC model matrices
+        # set model matrices
         self.Sz = np.eye(self.nk*(self.nh + 1), self.nk)
         self.Su = np.zeros((self.nk*(self.nh + 1), self.m*self.nh))
         for i in range(self.nh):
@@ -136,19 +105,9 @@ class denseMPC:
         if xr == None:
             xr = np.zeros((self.n*self.nh,1))
 
-        # set MPC constraints matrices
-        # if np.size(self.Zub) > 0:
-        #     self.Aieq = self.B
-        #     self.bieq = self.Zub - np.matmul(self.A,z0) 
-        # if np.size(self.Zlb) > 0:
-        #     self.Aieq = np.vstack((self.Aieq,-self.B))
-        #     self.bieq = np.vstack((self.bieq,-self.Zlb + np.matmul(self.A,z0)))
-        # if np.size(self.Uub) > 0:
-        #     self.Aieq = np.vstack((self.Aieq,np.eye(np.size(self.B,1))))
-        #     self.bieq = np.vstack((self.bieq,self.Uub))
-        # if np.size(self.Ulb) > 0:
-        #     self.Aieq = np.vstack((self.Aieq,-np.eye(np.size(self.B,1))))
-        #     self.bieq = np.vstack((self.bieq,-self.Ulb))
+        # set MPC matrices
+
+        # with substitutions ===================================================================================================
         Aieq_u = la.block_diag(*([self.Au]*self.nh))
         w0_u = np.tile(self.bu.reshape(2*self.m,1),(self.nh,1))
         E0_u = np.zeros((self.nh*2*self.m,self.nk))
@@ -162,8 +121,25 @@ class denseMPC:
 
         self.H = (self.C@self.Su).T @ self.Q @ (self.C@self.Su) + self.R
         self.H = (self.H + self.H.T)/2
-        self.f = 2*(self.Sz.T@self.C.T@self.Q@self.C@self.Su).T@z0 #+ (-2*self.Q@self.C@self.Su).T@xr + self.ulin
+        self.f = 2*(z0.T@self.Sz.T@self.C.T@self.Q@self.C@self.Su).T #+ (-2*self.Q@self.C@self.Su).T@xr + self.ulin
 
+        # without substitutions ===================================================================================================
+        Aieq_u = la.block_diag(*([self.Au]*self.nh))
+        w0_u = np.tile(self.bu.reshape(2*self.m,1),(self.nh,1))
+        E0_u = np.zeros((self.nh*2*self.m,self.nk))
+        Aieq_z = la.block_diag(*([self.Az]*self.nh)) @ self.Su
+        w0_z = np.tile(self.bz.reshape(2*self.nk,1),(self.nh,1))
+        E0_z = la.block_diag(*([self.Az]*self.nh)) @ -self.Sz
+        self.Aieq = np.vstack((Aieq_u,Aieq_z))
+        self.w0 = np.vstack((w0_u,w0_z))
+        self.E0 = np.vstack((E0_u,E0_z))
+        self.bieq = self.w0 + self.E0 @ z0
+
+        self.H = (self.C@self.Su).T @ self.Q @ (self.C@self.Su) + self.R
+        self.H = (self.H + self.H.T)/2
+        self.f = 2*(z0.T@self.Sz.T@self.C.T@self.Q@self.C@self.Su).T #+ (-2*self.Q@self.C@self.Su).T@xr + self.ulin
+
+        # QP solver ===================================================================================================
         # u = qpsolvers.solve_qp(self.H, self.f, self.Aieq, self.bieq, lb = self.Ulb, ub = self.Uub, solver='quadprog')
         # u = qpsolvers.quadprog_solve_qp(self.H, self.f, self.Aieq, self.bieq)
         # u = qpsolvers.solve_qp(self.H, self.f, self.Aieq, self.bieq)
