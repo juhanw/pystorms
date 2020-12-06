@@ -82,7 +82,8 @@ while not done:
             # record
             # umpc = np.vstack((umpc,actions ))
             umpc = actions
-            xkp = np.hstack((xkp,KPmodel.predict(xkp[:,-1],actions) ))
+            # xkp = np.hstack((xkp,KPmodel.predict(xkp[:,-1],actions) ))
+            xkp = np.hstack((xkp,KPmodel.predict(xtrue[:,-1],actions) ))
             done = env_equalfilling.step(actions)
             state = env_equalfilling.state() # y
             xtrue = np.hstack((xtrue,state[1:].reshape(5,1) ))
@@ -105,13 +106,16 @@ while not done:
 
         # record
         umpc = np.hstack((umpc,actions ))
-        xkp = np.hstack((xkp,KPmodel.predict(xkp[:,-1],actions) ))
+        # xkp = np.hstack((xkp,KPmodel.predict(xkp[:,-1],actions) ))
+        xkp = np.hstack((xkp,KPmodel.predict(xtrue[:,-1],actions) ))
         done = env_equalfilling.step(actions)
         state = env_equalfilling.state() # y
         xtrue = np.hstack((xtrue,state[1:].reshape(5,1) ))
 
-    # print(t, "is time")
+    print(t, "is time")
     t = t + 1
+    if t > 500:
+        break
     
 equalfilling_perf = sum(env_equalfilling.data_log["performance_measure"])
 
@@ -128,8 +132,19 @@ colors_hex = colorpalette.as_hex()
 plt.rcParams['figure.figsize'] = [20, 15]
 plt.rcParams['figure.dpi'] = 100 # 200 e.g. is really fine, but slower
 
-plt.rcParams['figure.figsize'] = [25, 25]
+# plot on Koopman performance ===================================================
+# t_plot = range(len(xkp))
+for i in range(5):
+    plt.subplot(2,3,i+1)
+    plt.plot(xtrue[:,i], '-')
+    plt.plot(xkp[:,i], '--')
 
+plt.tight_layout()
+plt.show()
+# print("done")
+
+# '''
+# plot on states =============================================================
 plotenvironment = env_equalfilling
 
 plt.subplot(2, 3, 1)
@@ -186,10 +201,10 @@ plt.axhline(5.28, color="r")
 plt.ylim([0,16])
 plt.ylabel("Depth")
 plt.title("Basin North3")
-
 plt.show()
 
-# new plot on control
+
+# new plot on control =============================================================
 plt.rcParams['figure.figsize'] = [6, 6]
 
 plt.plot(actions_north3, label='North3 Weir', linestyle='-', linewidth=3.0)
@@ -204,3 +219,4 @@ plt.suptitle('Control settings')
 plt.ylabel('Control asset setting')
 plt.xlabel('Simulation step')
 plt.show()
+# '''
