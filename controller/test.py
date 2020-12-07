@@ -114,7 +114,7 @@ while not done:
 
     print(t, "is time")
     t = t + 1
-    if t > 500:
+    if t > 1000:
         break
     
 equalfilling_perf = sum(env_equalfilling.data_log["performance_measure"])
