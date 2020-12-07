@@ -106,7 +106,7 @@ class denseMPC:
             xr = np.zeros((self.n*self.nh,1))
 
         # set MPC matrices
-
+        '''
         # with substitutions ===================================================================================================
         Aieq_u = la.block_diag(*([self.Au]*self.nh))
         w0_u = np.tile(self.bu.reshape(2*self.m,1),(self.nh,1))
@@ -123,23 +123,7 @@ class denseMPC:
         self.H = (self.H + self.H.T)/2
         self.f = 2*(z0.T@self.Sz.T@self.C.T@self.Q@self.C@self.Su).T #+ (-2*self.Q@self.C@self.Su).T@xr + self.ulin
 
-        # without substitutions ===================================================================================================
-        Aieq_u = la.block_diag(*([self.Au]*self.nh))
-        w0_u = np.tile(self.bu.reshape(2*self.m,1),(self.nh,1))
-        E0_u = np.zeros((self.nh*2*self.m,self.nk))
-        Aieq_z = la.block_diag(*([self.Az]*self.nh)) @ self.Su
-        w0_z = np.tile(self.bz.reshape(2*self.nk,1),(self.nh,1))
-        E0_z = la.block_diag(*([self.Az]*self.nh)) @ -self.Sz
-        self.Aieq = np.vstack((Aieq_u,Aieq_z))
-        self.w0 = np.vstack((w0_u,w0_z))
-        self.E0 = np.vstack((E0_u,E0_z))
-        self.bieq = self.w0 + self.E0 @ z0
-
-        self.H = (self.C@self.Su).T @ self.Q @ (self.C@self.Su) + self.R
-        self.H = (self.H + self.H.T)/2
-        self.f = 2*(z0.T@self.Sz.T@self.C.T@self.Q@self.C@self.Su).T #+ (-2*self.Q@self.C@self.Su).T@xr + self.ulin
-
-        # QP solver ===================================================================================================
+        # QP solver 
         # u = qpsolvers.solve_qp(self.H, self.f, self.Aieq, self.bieq, lb = self.Ulb, ub = self.Uub, solver='quadprog')
         # u = qpsolvers.quadprog_solve_qp(self.H, self.f, self.Aieq, self.bieq)
         # u = qpsolvers.solve_qp(self.H, self.f, self.Aieq, self.bieq)
@@ -150,6 +134,43 @@ class denseMPC:
         try:
             sol = cvxopt.solvers.qp(P,q,G,h)
             u0 = np.asarray(sol['x'][:self.m])
+        except:
+            print("Error Constraints!") # why there is no Ulb/Uub effect???
+            u0 = np.zeros((self.m,1))
+        
+        return u0
+        '''
+
+        # without substitutions ===================================================================================================
+        Geq_r = la.block_diag(*([-1*B]*self.nh))
+        Geq_l = np.eye(self.nh*self.nk)
+        for i in range(self.nh-1):
+            Geq_l[(i+1)*self.nk:(i+2)*self.nk,i*self.nk:(i+1)*self.nk] = -1*A
+        Geq = np.hstack((Geq_l,Geq_r))
+        Eeq = np.zeros((self.nh*(self.nk+self.m),self.nk))
+        Eeq[:self.nk,:] = A
+
+        Gineq = la.block_diag(np.zeros(np.shape(self.Az)),*([self.Az]*(self.nh-1)),*([self.Au]*self.nh))
+        Eineq = np.zeros((np.shape(Gineq)[0],self.nk))
+        Eineq[:np.shape(self.Az)[0],:] = -1*self.Az
+        wineq_z = np.tile(self.bz.reshape(2*self.nk,1),(self.nh,1))
+        wineq_u = np.tile(self.bu.reshape(2*self.m,1),(self.nh,1))
+        wineq = np.vstack((wineq_z,wineq_u))
+        
+        self.H = la.block_diag(self.Q,self.R)
+        self.H = (self.H + self.H.T)/2
+        self.f = np.zeros((self.nh*(self.nk+self.m),1))
+
+        # QP solver
+        P = cvxopt.matrix(2*self.H)
+        q = cvxopt.matrix(self.f)
+        G = cvxopt.matrix(Gineq)
+        h = cvxopt.matrix(wineq+Eineq@z0)
+        Aeq = cvxopt.matrix(Geq)
+        beq = cvxopt.matrix(Eeq@z0)
+        try:
+            sol = cvxopt.solvers.qp(P,q,G,h,Aeq,beq)
+            u0 = np.asarray(sol['x'][self.nh*self.nk:self.nh*self.nk+self.m])
         except:
             print("Error Constraints!") # why there is no Ulb/Uub effect???
             u0 = np.zeros((self.m,1))
