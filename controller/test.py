@@ -63,7 +63,8 @@ while not done:
             # initialize controller
             Zub = KPmodel.basis(Xub)
             Zlb = KPmodel.basis(Xlb)
-            KMPC = denseMPC(A,B,C,Uub=Uub,Ulb=Ulb,Zub=Zub,Zlb=Zlb)
+            # KMPC = denseMPC(A,B,C,Uub=Uub,Ulb=Ulb,Zub=Zub,Zlb=Zlb)
+            KMPC = denseMPC(A,B,C,Uub=Uub,Ulb=Ulb,Xub=Xub,Xlb=Xlb)
             
             # initialize containers
             xtrue = state[1:].reshape(5,1)
