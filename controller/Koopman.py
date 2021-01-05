@@ -6,7 +6,7 @@ class Koopman:
     """
     docstring
     """
-    def __init__(self,N_basis = 2,forgetCoeff = 0.97):
+    def __init__(self,N_basis = 2,forgetCoeff = 0.92):
         """
         initialization
         """
@@ -41,9 +41,9 @@ class Koopman:
         
         Zeta = np.vstack((self.psi_x,self.u))
         self.Q = np.matmul(self.psi_y,Zeta.T)
-        self.G = LA.inv(np.matmul(Zeta,Zeta.T))
+        self.G = LA.inv(np.matmul(Zeta,Zeta.T))/self.weighting
         self.M = np.matmul(self.x,self.psi_x.T)
-        self.P = LA.inv(np.matmul(self.psi_x,self.psi_x.T))
+        self.P = LA.inv(np.matmul(self.psi_x,self.psi_x.T))/self.weighting
         self.AB = np.matmul(self.Q,self.G)
         self.A = self.AB[:,:self.nk]
         self.B = self.AB[:,self.nk:]
@@ -70,12 +70,12 @@ class Koopman:
         self.psi_x = np.hstack((self.psi_x, psi_xx))
         self.psi_y = np.hstack((self.psi_y, psi_yy))
         
-        beta = 1/(1 + np.matmul(np.matmul(delta.T,self.G/self.weighting), delta))
-        inside1 = np.matmul(self.G/self.weighting,delta)
-        self.G = self.G/self.weighting - beta*np.matmul(inside1,inside1.T)
-        gamma = 1/(1 + np.matmul(np.matmul(psi_xx.T,self.P/self.weighting), psi_xx))
-        inside2 = np.matmul(self.P/self.weighting,psi_xx)
-        self.P = self.P/self.weighting - gamma*np.matmul(inside2,inside2.T)
+        beta = 1/(1 + np.matmul(np.matmul(delta.T,self.G), delta))
+        inside1 = np.matmul(self.G,delta)
+        self.G = (self.G - beta*np.matmul(inside1,inside1.T))/self.weighting
+        gamma = 1/(1 + np.matmul(np.matmul(psi_xx.T,self.P), psi_xx))
+        inside2 = np.matmul(self.P,psi_xx)
+        self.P = (self.P - gamma*np.matmul(inside2,inside2.T))/self.weighting
 
         innovation1 = psi_yy - np.matmul(self.AB,delta)
         self.AB = self.AB + beta*np.matmul(innovation1,inside1.T)
