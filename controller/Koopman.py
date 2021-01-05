@@ -6,15 +6,15 @@ class Koopman:
     """
     docstring
     """
-    def __init__(self,N_basis = 2,forgetCoeff = 1):
+    def __init__(self,N_basis = 2,forgetCoeff = 0.97):
         """
         initialization
         """
         self.nk = N_basis
-        self.weighting = forgetCoeff**2
+        self.weighting = forgetCoeff
 
     # initialization (need 2 timesnap data)
-    def initOperator(self,data):
+    def initOperator(self,xy,u):
         """
         change: nk = nk - N
         data = [x0;u] half-half
@@ -25,37 +25,32 @@ class Koopman:
         as starting from 1 data pair, thus there is no need to weight date
         the weighting process is contained in the recursive updates  
         """
-        self.n = np.size(data[0,:])
-        self.m = self.n
+        self.n = np.size(xy,1)
+        self.m = np.size(u,1)
         self.nbasis = self.nk - self.n
         
-        self.nt = np.size(data,0)
-        self.x = data[:int(self.nt/2)-1,:].T
-        self.y = data[1:int(self.nt/2),:].T
-        self.u = data[int(self.nt/2)+1:,:].T  # discard u0 that got x0
-
-        temp = np.hstack((self.x,self.y))
-        self.stdData = np.std(temp)
+        self.x = xy[:-1,:].T
+        self.y = xy[1:,:].T
+        self.u = u.T
+        self.stdData = np.std(xy)
+        
         self.Z = np.random.randn(self.n,self.nbasis)/self.stdData
-        self.basis = lambda x:rff(x,self.Z) # where x = (n * time)
-
+        self.basis = lambda x:rff(x,self.Z) # where x = (n x time)
         self.psi_x = self.basis(self.x)
         self.psi_y = self.basis(self.y)
         
-        Mc = np.matmul(self.psi_x,self.psi_x.T)
-        rVec = np.vstack((self.psi_x,self.u))
-        lVec = np.vstack((self.psi_y,self.x))
-        M1 = np.matmul(rVec,rVec.T)
-        M2 = np.matmul(lVec,rVec.T)
-        lam = 0.2
-        self.operator = np.matmul(M2,LA.inv(M1 + lam*np.eye(np.size(M1,0))))
-        self.A = self.operator[:self.nk,:self.nk]
-        self.B = self.operator[:self.nk,self.nk:]
-        self.C = self.operator[self.nk:,:self.nk]
-        self.P = LA.inv(M1)/self.weighting
-        self.Pc = LA.inv(Mc)/self.weighting
-    
-        return self.operator
+        Zeta = np.vstack((self.psi_x,self.u))
+        self.Q = np.matmul(self.psi_y,Zeta.T)
+        self.G = LA.inv(np.matmul(Zeta,Zeta.T))
+        self.M = np.matmul(self.x,self.psi_x.T)
+        self.P = LA.inv(np.matmul(self.psi_x,self.psi_x.T))
+        self.AB = np.matmul(self.Q,self.G)
+        self.A = self.AB[:,:self.nk]
+        self.B = self.AB[:,self.nk:]
+        self.C = np.matmul(self.M,self.P)
+        operator = np.vstack((self.AB,np.hstack((self.C,np.zeros((self.n,self.m))))))
+        
+        return operator
 
     # weighted RLS update
     def updateOperator(self,state,action):
@@ -63,40 +58,45 @@ class Koopman:
         docstring
 
         """
-        self.Aaug = np.hstack((self.A, self.B))
-        self.xx = self.y[:,-1].reshape(self.n,1)
-        self.uu = action
-        self.yy = state.reshape(self.n,1)
-        self.psi_xx = self.psi_y[:,-1].reshape(self.nk,1)
-        self.psi_yy = self.basis(self.yy)
-        self.psi_xaug = np.vstack((self.psi_xx,self.uu))
+        xx = self.y[:,-1].reshape(self.n,1)
+        uu = action.reshape(self.m,1)
+        yy = state.reshape(self.n,1)
+        psi_xx = self.psi_y[:,-1].reshape(self.nk,1)
+        psi_yy = self.basis(yy)
+        delta = np.vstack((psi_xx,uu))
+        self.u = np.hstack((self.u, uu))
+        self.x = np.hstack((self.x, xx))
+        self.y = np.hstack((self.y, yy))
+        self.psi_x = np.hstack((self.psi_x, psi_xx))
+        self.psi_y = np.hstack((self.psi_y, psi_yy))
+        
+        beta = 1/(1 + np.matmul(np.matmul(delta.T,self.G/self.weighting), delta))
+        inside1 = np.matmul(self.G/self.weighting,delta)
+        self.G = self.G/self.weighting - beta*np.matmul(inside1,inside1.T)
+        gamma = 1/(1 + np.matmul(np.matmul(psi_xx.T,self.P/self.weighting), psi_xx))
+        inside2 = np.matmul(self.P/self.weighting,psi_xx)
+        self.P = self.P/self.weighting - gamma*np.matmul(inside2,inside2.T)
 
-        # issue: Aaug(AND P) updates w/ [x;u], but C w/ [x]
-        P_psi_xaug = self.P@(self.psi_xaug)
-        Pc_psi_xx = self.Pc@(self.psi_xx)
-        gamma = 1/(1 + self.psi_xaug.T@(P_psi_xaug))
-        gammac = 1/(1 + self.psi_xx.T@(Pc_psi_xx))
-        self.Aaug += np.outer(gamma*(self.psi_yy - self.Aaug@self.psi_xaug), P_psi_xaug)
-        self.C += np.outer(gammac*(self.xx - self.C@self.psi_xx), self.Pc@self.psi_xx)
-        self.P = (self.P - gamma*np.outer(P_psi_xaug,P_psi_xaug))/self.weighting
-        self.P = (self.P + self.P.T)/2
-        self.Pc = (self.Pc - gammac*np.outer(Pc_psi_xx,Pc_psi_xx))/self.weighting
-        self.Pc = (self.Pc + self.Pc.T)/2
-        self.A = self.Aaug[:,:self.nk]
-        self.B = self.Aaug[:,self.nk:]
-        CD = np.hstack((self.C,np.zeros((np.size(self.C,0),np.size(self.B,1)))))
-        self.operator = np.vstack((self.Aaug,CD))
-
-        return self.operator
+        innovation1 = psi_yy - np.matmul(self.AB,delta)
+        self.AB = self.AB + beta*np.matmul(innovation1,inside1.T)
+        self.A = self.AB[:,:self.nk]
+        self.B = self.AB[:,self.nk:]
+        innovation2 = xx - np.matmul(self.C,psi_xx)
+        self.C = self.C + gamma*np.matmul(innovation2,inside2.T)
+        operator = np.vstack((self.AB,np.hstack((self.C,np.zeros((self.n,self.m))))))
+        
+        return operator
     
     def predict(self,x0,u):
-        lift = self.A@self.basis(x0) + self.B@u
-        return self.C@lift
+        lift = np.matmul(self.A,self.basis(x0.reshape(self.n,1))) + np.matmul(self.B,u.reshape(self.m,1))
+        x_kp = np.matmul(self.C,lift)
+        return x_kp
 
 # RFF basis
 def rff(X,Z):
     """
-    docstring
+    X is a n x 1 vector
+    return Psi as a Nk x t matrix
     """
     Nk = np.size(Z,1)
     Zc = Z[:,:int(Nk/2)]
@@ -109,8 +109,8 @@ def rff(X,Z):
         sin_psi = sin_psi.reshape(int(Nk/2),1)
     # concecation: 
     if np.size(X) == 5:
-        Psi = np.vstack((X.reshape(5,1),np.vstack((cos_psi,sin_psi))))  # Nk x m
+        Psi = np.vstack((X.reshape(5,1),np.vstack((cos_psi,sin_psi))))  # Nk x t
     else:    
-        Psi = np.vstack((X,np.vstack((cos_psi,sin_psi))))  # Nk x m
+        Psi = np.vstack((X,np.vstack((cos_psi,sin_psi))))  # Nk x t
     return Psi
 

@@ -16,7 +16,9 @@ env_equalfilling = pystorms.scenarios.delta()
 done = False
 
 u = []
-x0 = []
+# x0 = []
+x0 = env_equalfilling.state()[1:]
+x0 = x0.reshape(1,5)
 actions_north3 = []
 actions_north2 = []
 actions_north1 = []
@@ -45,17 +47,19 @@ while not done:
 
         done = env_equalfilling.step(actions)
         state = env_equalfilling.state()
-        x0.append(state[1:])
+        x0 = np.vstack((x0,state[1:].reshape(1,5)))
+        # x0.append(state[1:])
 
         if t == n0:
             u = np.asarray(u)
             x0 = np.asarray(x0)
-            u.reshape(n0+1,5)
-            x0.reshape(n0+1,5)
+            # u.reshape(n0+1,5)
+            # x0.reshape(n0+1,5)
             
-            # initialize Koopman model
-            initData = np.vstack((x0,u))
-            operator = KPmodel.initOperator(initData)
+            # initialize Koopman model:
+            # initData = np.vstack((x0,u))
+            # operator = KPmodel.initOperator(initData)
+            operator = KPmodel.initOperator(x0,u)
             A = operator[:nk,:nk]
             B = operator[:nk,nk:]
             C = operator[nk:,:nk]
@@ -65,39 +69,35 @@ while not done:
             Zlb = KPmodel.basis(Xlb)
             # KMPC = denseMPC(A,B,C,Uub=Uub,Ulb=Ulb,Zub=Zub,Zlb=Zlb)
             KMPC = denseMPC(A,B,C,Uub=Uub,Ulb=Ulb,Xub=Xub,Xlb=Xlb)
-            
-            # initialize containers
-            xtrue = state[1:].reshape(5,1)
-            xkp = xtrue
-            # umpc = np.empty(np.shape(state[1:]),float)
     
             # get control input
-            z0 = KPmodel.basis(state[1:]) # x
+            z0 = KPmodel.basis(x0[-1,:]) # x
             actions = KMPC.getMPC(z0,A,B,C)
             actions_north3.append(actions[0])
             actions_north2.append(actions[1])
             actions_north1.append(actions[2])
             actions_central.append(actions[3])
             actions_south.append(actions[4])
-
-            # record
-            # umpc = np.vstack((umpc,actions ))
-            umpc = actions
-            # xkp = np.hstack((xkp,KPmodel.predict(xkp[:,-1],actions) ))
-            xkp = np.hstack((xkp,KPmodel.predict(xtrue[:,-1],actions) ))
-            done = env_equalfilling.step(actions)
-            state = env_equalfilling.state() # y
-            xtrue = np.hstack((xtrue,state[1:].reshape(5,1) ))
+            
+            # initialize containers
+            xtrue = x0[-1,:].reshape(1,5)
+            xkp = xtrue
+            umpc = actions.reshape(1,5)
+            # xkp = np.vstack((xkp,KPmodel.predict(xtrue[:,-1],actions) ))
+            # done = env_equalfilling.step(umpc[-1,:])
+            # state = env_equalfilling.state() # y
+            # xtrue = np.hstack((xtrue,state[1:].reshape(1,5)))
 
     else:
         # update Koopman model
-        operator = KPmodel.updateOperator(state[1:],actions)
+        operator = KPmodel.updateOperator(xtrue[-1,:],umpc[-1,:])
         A = operator[:nk,:nk]
         B = operator[:nk,nk:]
         C = operator[nk:,:nk]
-
+        xkp = np.vstack((xkp,KPmodel.predict(xtrue[-1,:],umpc[-1,:]).reshape(1,np.size(xkp,1)) ))
+        
         # get control input
-        z0 = KPmodel.basis(state[1:])
+        z0 = KPmodel.basis(xtrue[-1,:])
         actions = KMPC.getMPC(z0,A,B,C)
         actions_north3.append(actions[0])
         actions_north2.append(actions[1])
@@ -106,16 +106,14 @@ while not done:
         actions_south.append(actions[4])
 
         # record
-        umpc = np.hstack((umpc,actions ))
-        # xkp = np.hstack((xkp,KPmodel.predict(xkp[:,-1],actions) ))
-        xkp = np.hstack((xkp,KPmodel.predict(xtrue[:,-1],actions) ))
+        umpc = np.vstack((umpc,actions.reshape(1,np.size(umpc,1)) ))
         done = env_equalfilling.step(actions)
         state = env_equalfilling.state() # y
-        xtrue = np.hstack((xtrue,state[1:].reshape(5,1) ))
+        xtrue = np.vstack((xtrue,state[1:].reshape(1,5) ))
 
     print(t, "is time")
     t = t + 1
-    if t > 1000:
+    if t > 300:
         break
     
 equalfilling_perf = sum(env_equalfilling.data_log["performance_measure"])
