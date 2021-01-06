@@ -31,7 +31,7 @@ class Koopman:
         
         self.x = xy[:-1,:].T
         self.y = xy[1:,:].T
-        self.u = u.T
+        self.u = u[1:,:].T
 
         mu = np.mean(xy,0)
         sum_norm2 = 0
@@ -78,6 +78,8 @@ class Koopman:
         self.psi_x = np.hstack((self.psi_x, psi_xx))
         self.psi_y = np.hstack((self.psi_y, psi_yy))
         
+        self.G = (self.G + self.G.T)/2
+        self.P = (self.P + self.P.T)/2
         beta = 1/(1 + np.matmul(np.matmul(delta.T,self.G), delta))
         gamma = 1/(1 + np.matmul(np.matmul(psi_xx.T,self.P), psi_xx))
         inside1 = np.matmul(self.G,delta)

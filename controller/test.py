@@ -16,9 +16,9 @@ env_equalfilling = pystorms.scenarios.delta()
 done = False
 
 u = []
-# x0 = []
-x0 = env_equalfilling.state()[1:]
-x0 = x0.reshape(1,5)
+x0 = []
+# x0 = env_equalfilling.state()[1:]
+# x0 = x0.reshape(1,5)
 actions_north3 = []
 actions_north2 = []
 actions_north1 = []
@@ -32,7 +32,7 @@ Ulb = np.zeros((1,5))
 
 t = 0
 nk = 4 + 5
-n0 = 20
+n0 = 5
 KPmodel = Koopman(nk)
 
 while not done:
@@ -47,8 +47,8 @@ while not done:
 
         done = env_equalfilling.step(actions)
         state = env_equalfilling.state()
-        x0 = np.vstack((x0,state[1:].reshape(1,5)))
-        # x0.append(state[1:])
+        # x0 = np.vstack((x0,state[1:].reshape(1,5)))
+        x0.append(state[1:])
 
         if t == n0:
             u = np.asarray(u)
@@ -118,7 +118,7 @@ while not done:
 
     print(t, "is time")
     t = t + 1
-    if t > 150:
+    if t > 500:
         break
     
 equalfilling_perf = sum(env_equalfilling.data_log["performance_measure"])
@@ -140,8 +140,8 @@ plt.rcParams['figure.dpi'] = 100 # 200 e.g. is really fine, but slower
 # t_plot = range(len(xkp))
 for i in range(5):
     plt.subplot(2,3,i+1)
-    plt.plot(xtrue[:,i], '-')
-    plt.plot(xkp[:,i], '--')
+    plt.plot(xtrue[200:,i], '-')
+    plt.plot(xkp[200:,i], '--')
 
 plt.tight_layout()
 plt.show()
