@@ -6,7 +6,7 @@ class Koopman:
     """
     docstring
     """
-    def __init__(self,N_basis = 2,forgetCoeff = 0.92):
+    def __init__(self,N_basis = 2,forgetCoeff = 0.96):
         """
         initialization
         """
@@ -32,7 +32,15 @@ class Koopman:
         self.x = xy[:-1,:].T
         self.y = xy[1:,:].T
         self.u = u.T
-        self.stdData = np.std(xy)
+
+        mu = np.mean(xy,0)
+        sum_norm2 = 0
+        N = np.size(xy,0)
+        for i in range(N):
+            sum_norm2 = sum_norm2 + np.linalg.norm(xy[i,:]-mu)**2
+        std_k = np.sqrt(sum_norm2 / N)
+        self.stdData = std_k
+        # self.stdData = np.std(xy)
         
         self.Z = np.random.randn(self.n,self.nbasis)/self.stdData
         self.basis = lambda x:rff(x,self.Z) # where x = (n x time)
@@ -71,18 +79,18 @@ class Koopman:
         self.psi_y = np.hstack((self.psi_y, psi_yy))
         
         beta = 1/(1 + np.matmul(np.matmul(delta.T,self.G), delta))
-        inside1 = np.matmul(self.G,delta)
-        self.G = (self.G - beta*np.matmul(inside1,inside1.T))/self.weighting
         gamma = 1/(1 + np.matmul(np.matmul(psi_xx.T,self.P), psi_xx))
+        inside1 = np.matmul(self.G,delta)
         inside2 = np.matmul(self.P,psi_xx)
-        self.P = (self.P - gamma*np.matmul(inside2,inside2.T))/self.weighting
-
         innovation1 = psi_yy - np.matmul(self.AB,delta)
+        innovation2 = xx - np.matmul(self.C,psi_xx)
         self.AB = self.AB + beta*np.matmul(innovation1,inside1.T)
         self.A = self.AB[:,:self.nk]
         self.B = self.AB[:,self.nk:]
-        innovation2 = xx - np.matmul(self.C,psi_xx)
         self.C = self.C + gamma*np.matmul(innovation2,inside2.T)
+        self.G = (self.G - beta*np.matmul(inside1,inside1.T))/self.weighting
+        self.P = (self.P - gamma*np.matmul(inside2,inside2.T))/self.weighting
+
         operator = np.vstack((self.AB,np.hstack((self.C,np.zeros((self.n,self.m))))))
         
         return operator
@@ -90,7 +98,7 @@ class Koopman:
     def predict(self,x0,u):
         lift = np.matmul(self.A,self.basis(x0.reshape(self.n,1))) + np.matmul(self.B,u.reshape(self.m,1))
         x_kp = np.matmul(self.C,lift)
-        return x_kp
+        return x_kp.reshape(1,self.n)
 
 # RFF basis
 def rff(X,Z):

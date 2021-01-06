@@ -83,12 +83,16 @@ while not done:
             xtrue = x0[-1,:].reshape(1,5)
             xkp = xtrue
             umpc = actions.reshape(1,5)
-            # xkp = np.vstack((xkp,KPmodel.predict(xtrue[:,-1],actions) ))
+            xkp = np.vstack((xkp,KPmodel.predict(xtrue,umpc) ))
             # done = env_equalfilling.step(umpc[-1,:])
             # state = env_equalfilling.state() # y
             # xtrue = np.hstack((xtrue,state[1:].reshape(1,5)))
 
     else:
+        done = env_equalfilling.step(umpc[-1,:])
+        state = env_equalfilling.state() # y
+        xtrue = np.vstack((xtrue,state[1:].reshape(1,5) ))
+
         # update Koopman model
         operator = KPmodel.updateOperator(xtrue[-1,:],umpc[-1,:])
         A = operator[:nk,:nk]
@@ -104,16 +108,17 @@ while not done:
         actions_north1.append(actions[2])
         actions_central.append(actions[3])
         actions_south.append(actions[4])
-
-        # record
         umpc = np.vstack((umpc,actions.reshape(1,np.size(umpc,1)) ))
-        done = env_equalfilling.step(actions)
-        state = env_equalfilling.state() # y
-        xtrue = np.vstack((xtrue,state[1:].reshape(1,5) ))
+
+        # # record
+        # umpc = np.vstack((umpc,actions.reshape(1,np.size(umpc,1)) ))
+        # done = env_equalfilling.step(actions)
+        # state = env_equalfilling.state() # y
+        # xtrue = np.vstack((xtrue,state[1:].reshape(1,5) ))
 
     print(t, "is time")
     t = t + 1
-    if t > 300:
+    if t > 150:
         break
     
 equalfilling_perf = sum(env_equalfilling.data_log["performance_measure"])
