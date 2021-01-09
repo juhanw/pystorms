@@ -6,7 +6,7 @@ class Koopman:
     """
     docstring
     """
-    def __init__(self,N_basis = 2,forgetCoeff = 0.9):
+    def __init__(self,N_basis = 2,forgetCoeff = 0.96):
         """
         initialization
         """
@@ -39,10 +39,10 @@ class Koopman:
 
         Nt = len(x_init[0,:])
         weight = np.sqrt(self.weighting)**range(Nt-1,-1,-1)
-        self.x, self.y, self.u = weight*x_init, weight*y_init, weight*u_init
-        self.x = self.scale(self.x,state_scale=True)
-        self.y = self.scale(self.y,state_scale=True)
-        self.u = self.scale(self.u,action_scale=True)
+        x_scaled = self.scale(x_init,state_scale=True)
+        y_scaled = self.scale(y_init,state_scale=True)
+        u_scaled = self.scale(u_init,action_scale=True)
+        self.x, self.y, self.u = weight*x_scaled, weight*y_scaled, weight*u_scaled
 
         mu = np.mean(xy,0)
         sum_norm2 = 0
@@ -121,19 +121,19 @@ class Koopman:
         if np.size(data) == self.n or np.size(data) == self.m:
             data = data.reshape(np.size(data),1)
         
-        if np.min(np.shape(data)) > 1:
+        if np.min(np.shape(data)) > 1:  #5x100
             if state_scale:
                 self.state_center = (self.Xub + self.Xlb)/2     #Xub = 1 x n
                 self.state_range = (self.Xub - self.Xlb)/2
                 self.state_center = self.state_center.reshape(self.n,1)
-                self.state_range = self.state_range.reshape(self.n,1)
+                self.state_range = self.state_range.reshape(self.n,1)   #5x1
             elif action_scale:
                 self.action_center = (self.Uub + self.Ulb)/2
                 self.action_range = (self.Uub - self.Ulb)/2
                 self.action_center = self.action_center.reshape(self.m,1)
                 self.action_range = self.action_range.reshape(self.m,1)
 
-        if np.shape(data)[0] < np.shape(data)[1]:
+        if np.shape(data)[0] < np.shape(data)[1] and np.min(np.shape(data)) == 1:
             data = data.T
         if down:
             if state_scale:
