@@ -25,8 +25,10 @@ actions_north1 = []
 actions_central = []
 actions_south = []
 settings = np.ones(5)
-Xub = np.array([11.99, 6.59, 5.92, 5.7, 9.5])
-Xlb = np.array([5.28, 4.04, 2.11, 2.21, 0])
+Xub = np.asarray([5.7, 9.5, 5.92, 6.59, 11.99])
+Xlb = np.asarray([2.21, 0, 2.11, 4.04, 5.28])
+# Xub = 12*np.ones((1,5))
+# Xlb = 0*np.ones((1,5))
 Uub = np.ones((1,5))
 Ulb = np.zeros((1,5))
 
@@ -47,19 +49,20 @@ while not done:
 
         done = env_equalfilling.step(actions)
         state = env_equalfilling.state()
+        # states = [state[2], state[1], state[0], state[4], state[5]]
         # x0 = np.vstack((x0,state[1:].reshape(1,5)))
-        x0.append(state[1:])
+        x0.append(state[:-1])
 
         if t == n0:
             u = np.asarray(u)
             x0 = np.asarray(x0)
-            # u.reshape(n0+1,5)
-            # x0.reshape(n0+1,5)
+            u.reshape(n0+1,5)
+            x0.reshape(n0+1,5)
             
             # initialize Koopman model:
             # initData = np.vstack((x0,u))
             # operator = KPmodel.initOperator(initData)
-            operator = KPmodel.initOperator(x0,u)
+            operator = KPmodel.initOperator(x0,u,Xub,Xlb,Uub,Ulb)
             A = operator[:nk,:nk]
             B = operator[:nk,nk:]
             C = operator[nk:,:nk]
@@ -91,7 +94,8 @@ while not done:
     else:
         done = env_equalfilling.step(umpc[-1,:])
         state = env_equalfilling.state() # y
-        xtrue = np.vstack((xtrue,state[1:].reshape(1,5) ))
+        # states = [state[2], state[1], state[0], state[4], state[5]]
+        xtrue = np.vstack((xtrue,state[:-1].reshape(1,5) ))
 
         # update Koopman model
         operator = KPmodel.updateOperator(xtrue[-1,:],umpc[-1,:])
@@ -118,7 +122,7 @@ while not done:
 
     print(t, "is time")
     t = t + 1
-    if t > 500:
+    if t > 350:
         break
     
 equalfilling_perf = sum(env_equalfilling.data_log["performance_measure"])
@@ -140,8 +144,8 @@ plt.rcParams['figure.dpi'] = 100 # 200 e.g. is really fine, but slower
 # t_plot = range(len(xkp))
 for i in range(5):
     plt.subplot(2,3,i+1)
-    plt.plot(xtrue[200:,i], '-')
-    plt.plot(xkp[200:,i], '--')
+    plt.plot(xtrue[:,i], '-')
+    plt.plot(xkp[:,i], '--')
 
 plt.tight_layout()
 plt.show()
@@ -159,14 +163,6 @@ plt.title("Conduit East Out")
 plt.ylabel("Flow")
 
 plt.subplot(2, 3, 2)
-plt.plot(plotenvironment.data_log["depthN"]["basin_S"], color=colors_hex[0])
-plt.axhline(9.5, color="r")
-plt.axhline(6.55, color="k")
-plt.ylim([0,12])
-plt.ylabel("Depth")
-plt.title("South Basin")
-
-plt.subplot(2, 3, 3)
 plt.plot(plotenvironment.data_log["depthN"]["basin_C"], color=colors_hex[0])
 plt.axhline(5.7, color="r")
 plt.axhline(3.8, color="k")
@@ -175,6 +171,15 @@ plt.axhline(2.21, color="r")
 plt.ylim([0,11.5])
 plt.ylabel("Depth")
 plt.title("Central Basin")
+
+
+plt.subplot(2, 3, 3)
+plt.plot(plotenvironment.data_log["depthN"]["basin_S"], color=colors_hex[0])
+plt.axhline(9.5, color="r")
+plt.axhline(6.55, color="k")
+plt.ylim([0,12])
+plt.ylabel("Depth")
+plt.title("South Basin")
 
 plt.subplot(2, 3, 4)
 plt.plot(plotenvironment.data_log["depthN"]["basin_N1"], color=colors_hex[0])
