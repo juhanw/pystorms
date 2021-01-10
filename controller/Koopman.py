@@ -59,9 +59,10 @@ class Koopman:
         self.psi_y = self.basis(self.y)
         
         Zeta = np.vstack((self.psi_x,self.u))
+        non_singular = 0.2
+        M1 = np.matmul(Zeta,Zeta.T)
+        self.G = LA.inv(M1 + non_singular*np.eye(len(M1)))
         self.Q = np.matmul(self.psi_y,Zeta.T)
-        # self.G = np.matmul(Zeta,Zeta.T)
-        self.G = LA.inv(np.matmul(Zeta,Zeta.T))/self.weighting
         self.M = np.matmul(self.x,self.psi_x.T)
         self.P = LA.inv(np.matmul(self.psi_x,self.psi_x.T))/self.weighting
         self.AB = np.matmul(self.Q,self.G)
@@ -70,7 +71,14 @@ class Koopman:
         # self.C = np.matmul(self.M,self.P)
         self.C = np.hstack((np.eye(self.n),np.zeros((self.n,self.nbasis)) ))
         operator = np.vstack((self.AB,np.hstack((self.C,np.zeros((self.n,self.m))))))
-        
+    
+        # self.G = LA.inv(np.matmul(Zeta,Zeta.T))/self.weighting
+
+        # Evaluate regression accuracy:
+        error = self.y - np.matmul(self.C,np.matmul(self.AB,Zeta))
+        NRMSE_Koopman = 100*np.sqrt(sum(np.linalg.norm(error,axis=0)**2)) / np.sqrt(sum(np.linalg.norm(self.y,axis=0)**2))
+        print(NRMSE_Koopman,"%")
+
         return operator
 
     # weighted RLS update

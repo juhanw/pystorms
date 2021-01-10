@@ -34,7 +34,7 @@ Ulb = np.zeros((1,5))
 
 t = 0
 nk = 4 + 5
-n0 = 100
+n0 = 20    #n0 > nk + m
 KPmodel = Koopman(nk)
 
 while not done:
@@ -122,7 +122,7 @@ while not done:
 
     print(t, "is time")
     t = t + 1
-    if t > 300:
+    if t > 150:
         break
     
 equalfilling_perf = sum(env_equalfilling.data_log["performance_measure"])
