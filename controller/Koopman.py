@@ -60,13 +60,15 @@ class Koopman:
         
         Zeta = np.vstack((self.psi_x,self.u))
         self.Q = np.matmul(self.psi_y,Zeta.T)
+        # self.G = np.matmul(Zeta,Zeta.T)
         self.G = LA.inv(np.matmul(Zeta,Zeta.T))/self.weighting
         self.M = np.matmul(self.x,self.psi_x.T)
         self.P = LA.inv(np.matmul(self.psi_x,self.psi_x.T))/self.weighting
         self.AB = np.matmul(self.Q,self.G)
         self.A = self.AB[:,:self.nk]
         self.B = self.AB[:,self.nk:]
-        self.C = np.matmul(self.M,self.P)
+        # self.C = np.matmul(self.M,self.P)
+        self.C = np.hstack((np.eye(self.n),np.zeros((self.n,self.nbasis)) ))
         operator = np.vstack((self.AB,np.hstack((self.C,np.zeros((self.n,self.m))))))
         
         return operator
@@ -102,7 +104,7 @@ class Koopman:
         self.AB = self.AB + beta*np.matmul(innovation1,inside1.T)
         self.A = self.AB[:,:self.nk]
         self.B = self.AB[:,self.nk:]
-        self.C = self.C + gamma*np.matmul(innovation2,inside2.T)
+        # self.C = self.C + gamma*np.matmul(innovation2,inside2.T)
         self.G = (self.G - beta*np.matmul(inside1,inside1.T))/self.weighting
         self.P = (self.P - gamma*np.matmul(inside2,inside2.T))/self.weighting
 
