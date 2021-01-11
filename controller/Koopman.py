@@ -44,22 +44,25 @@ class Koopman:
         u_scaled = self.scale(u_init,action_scale=True)
         self.x, self.y, self.u = weight*x_scaled, weight*y_scaled, weight*u_scaled
 
-        mu = np.mean(xy,0)
-        sum_norm2 = 0
-        N = np.size(xy,0)
-        for i in range(N):
-            sum_norm2 = sum_norm2 + np.linalg.norm(xy[i,:]-mu)**2
-        std_k = np.sqrt(sum_norm2 / N)
-        self.stdData = std_k
-        # self.stdData = np.std(xy)
+        # mu = np.mean(xy,0).reshape(self.n,1)
+        # stdData = np.std(xy,0).reshape(self.n,1)
+        # self.Z = mu + np.multiply(np.random.randn(self.n,self.nbasis),1/stdData)
         
+        # sum_norm2 = 0
+        # N = np.size(xy,0)
+        # for i in range(N):
+        #     sum_norm2 = sum_norm2 + np.linalg.norm(xy[i,:]-mu)**2
+        # std_k = np.sqrt(sum_norm2 / N)
+        # self.stdData = std_k
+
+        self.stdData = np.std(xy)
         self.Z = np.random.randn(self.n,self.nbasis)/self.stdData
         self.basis = lambda x:rff(x,self.Z) # where x = (n x time)
         self.psi_x = self.basis(self.x)
         self.psi_y = self.basis(self.y)
         
         Zeta = np.vstack((self.psi_x,self.u))
-        non_singular = 0.2
+        non_singular = 0.1
         M1 = np.matmul(Zeta,Zeta.T)
         self.G = LA.inv(M1 + non_singular*np.eye(len(M1)))
         self.Q = np.matmul(self.psi_y,Zeta.T)
@@ -148,16 +151,20 @@ class Koopman:
         if down:
             if state_scale:
                 scaled = (data - self.state_center)/self.state_range
+                # scaled = (data - self.Xlb.reshape(self.n,1))/self.state_range
             elif action_scale:
                 scaled = (data - self.action_center)/self.action_range
+                # scaled = (data - self.Ulb.reshape(self.m,1))/self.action_range
             else:
                 print("ERROR scaling parameter!")
                 scaled = data
         else:
             if state_scale:
                 scaled = data*self.state_range + self.state_center
+                # scaled = data*self.state_range + self.Xlb.reshape(self.n,1)
             elif action_scale:
                 scaled = data*self.action_range + self.action_center
+                # scaled = data*self.action_range + self.Ulb.reshape(self.m,1)
             else:
                 print("ERROR scaling parameter!")
                 scaled = data
@@ -173,17 +180,19 @@ def rff(X,Z):
     if np.size(X,0) != 5:
         X = X.reshape(5,int(np.size(X)/5))
     Nk = np.size(Z,1)
-    Zc = Z[:,:int(Nk/2)]
-    Zs = Z[:,int(Nk/2):]
+    ND = int(Nk/2)
+    Zc = Z[:,:ND]
+    Zs = Z[:,ND:]
     cos_psi = np.cos(np.matmul(Zc.T,X))
     sin_psi = np.sin(np.matmul(Zs.T,X))
-    if np.size(cos_psi) == int(Nk/2):
-        cos_psi = cos_psi.reshape(int(Nk/2),1)
-    if np.size(sin_psi ) == int(Nk/2):
-        sin_psi = sin_psi.reshape(int(Nk/2),1)
+    if np.size(cos_psi) == ND:
+        cos_psi = cos_psi.reshape(ND,1)
+    if np.size(sin_psi ) == ND:
+        sin_psi = sin_psi.reshape(ND,1)
+    rff = np.vstack((cos_psi,sin_psi)) / np.sqrt(ND)
     # concecation: 
     if np.size(X) == 5:
-        Psi = np.vstack((X.reshape(5,1),np.vstack((cos_psi,sin_psi))))  # Nk x t
+        Psi = np.vstack((X.reshape(5,1),rff))  # Nk x t
     else:    
-        Psi = np.vstack((X,np.vstack((cos_psi,sin_psi))))  # Nk x t
+        Psi = np.vstack((X,rff))  # Nk x t
     return Psi        

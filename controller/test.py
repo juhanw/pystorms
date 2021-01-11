@@ -74,8 +74,9 @@ while not done:
             KMPC = denseMPC(A,B,C,Uub=Uub,Ulb=Ulb,Xub=Xub,Xlb=Xlb)
     
             # get control input
-            z0 = KPmodel.basis(x0[-1,:]) # x
-            actions = KMPC.getMPC(z0,A,B,C)
+            z0 = KPmodel.basis(KPmodel.scale(x0[-1,:],state_scale=True)) # x
+            actions_mpc = KMPC.getMPC(z0,A,B,C)
+            actions = KPmodel.scale(actions_mpc,down=False,action_scale=True)
             actions_north3.append(actions[0])
             actions_north2.append(actions[1])
             actions_north1.append(actions[2])
@@ -105,8 +106,9 @@ while not done:
         xkp = np.vstack((xkp,KPmodel.predict(xtrue[-1,:],umpc[-1,:]).reshape(1,np.size(xkp,1)) ))
         
         # get control input
-        z0 = KPmodel.basis(xtrue[-1,:])
-        actions = KMPC.getMPC(z0,A,B,C)
+        z0 = KPmodel.basis(KPmodel.scale(xtrue[-1,:],state_scale=True))
+        actions_mpc = KMPC.getMPC(z0,A,B,C)
+        actions = KPmodel.scale(actions_mpc,down=False,action_scale=True)
         actions_north3.append(actions[0])
         actions_north2.append(actions[1])
         actions_north1.append(actions[2])

@@ -115,6 +115,7 @@ class denseMPC:
         # self.Ax = -C
         # self.Ax = np.vstack((self.Ax,C))
         # self.E = np.vstack((self.E, np.kron(np.eye(self.nh),self.Ax)))
+        # state constraints:
         self.Ax = -np.eye(self.n)
         self.Ax = np.vstack((self.Ax,np.eye(self.n)))
         Enew = np.zeros((2*self.n*self.nh,self.nk*self.nh))
@@ -147,7 +148,7 @@ class denseMPC:
             except:
                 print("Error Constraints!") # why there is no Ulb/Uub effect???
                 # u0 = np.zeros((self.m,1))
-                u0 = np.random.uniform(0,1,5)
+                u0 = np.random.uniform(-1,1,5)
         
         return u0
 
