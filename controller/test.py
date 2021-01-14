@@ -4,6 +4,7 @@ import pystorms
 # sys.path.append("/controller")
 from denseMPC import denseMPC
 from Koopman import Koopman 
+# from Koopman_rewrite import Koopman
 # Python Scientific Computing Stack
 import numpy as np
 import pandas as pd
@@ -12,28 +13,29 @@ import seaborn as sns
 from matplotlib import pyplot as plt
 
 # KMPC
-env_equalfilling = pystorms.scenarios.delta()
+env_equalfilling = pystorms.scenarios.delta() # states = [BC, BS, N1, N2, N3, N4]
 done = False
 
 u = []
 x0 = []
-# x0 = env_equalfilling.state()[1:]
-# x0 = x0.reshape(1,5)
 actions_north3 = []
 actions_north2 = []
 actions_north1 = []
 actions_central = []
 actions_south = []
 settings = np.ones(5)
-Xub = np.asarray([5.7, 9.5, 5.92, 6.59, 11.99])
+# Xub = np.asarray([11.99, 6.59, 5.92, 5.7, 9.5]) # [N3, N2, N1, BC, BS]
+# Xlb = np.asarray([5.28, 4.04, 2.11, 2.21, 0])
+Xub = np.asarray([5.7, 9.5, 5.92, 6.59, 11.99]) # [BC, BS, N1, N2, N3]
 Xlb = np.asarray([2.21, 0, 2.11, 4.04, 5.28])
-# Xub = 12*np.ones((1,5))
-# Xlb = 0*np.ones((1,5))
 Uub = np.ones((1,5))
 Ulb = np.zeros((1,5))
 
 t = 0
-nk = 4 + 5
+n_basis = 4
+n = Xub.size
+m = Uub.size
+nk = n + n_basis
 n0 = 20    #n0 > nk + m
 KPmodel = Koopman(nk)
 
@@ -41,11 +43,16 @@ while not done:
     if  t <= n0:
         actions =  np.random.uniform(0,1,5)
         u.append(actions) 
-        actions_north3.append(actions[0])
-        actions_north2.append(actions[1])
+        # actions_north3.append(actions[0])
+        # actions_north2.append(actions[1])
+        # actions_north1.append(actions[2])
+        # actions_central.append(actions[3])
+        # actions_south.append(actions[4])
+        actions_north3.append(actions[4])
+        actions_north2.append(actions[3])
         actions_north1.append(actions[2])
-        actions_central.append(actions[3])
-        actions_south.append(actions[4])
+        actions_central.append(actions[0])
+        actions_south.append(actions[1])
 
         done = env_equalfilling.step(actions)
         state = env_equalfilling.state()
@@ -56,32 +63,39 @@ while not done:
         if t == n0:
             u = np.asarray(u)
             x0 = np.asarray(x0)
-            u.reshape(n0+1,5)
-            x0.reshape(n0+1,5)
+            u.reshape(n0+1,m)
+            x0.reshape(n0+1,n)
             
             # initialize Koopman model:
-            # initData = np.vstack((x0,u))
-            # operator = KPmodel.initOperator(initData)
             operator = KPmodel.initOperator(x0,u,Xub,Xlb,Uub,Ulb)
             A = operator[:nk,:nk]
             B = operator[:nk,nk:]
             C = operator[nk:,:nk]
+            # A,B,C = KPmodel.initialization(x0,u,Xub,Xlb,Uub,Ulb)
             
             # initialize controller
-            Zub = KPmodel.basis(Xub)
-            Zlb = KPmodel.basis(Xlb)
+            # Zub = KPmodel.basis(Xub)
+            # Zlb = KPmodel.basis(Xlb)
             # KMPC = denseMPC(A,B,C,Uub=Uub,Ulb=Ulb,Zub=Zub,Zlb=Zlb)
             KMPC = denseMPC(A,B,C,Uub=Uub,Ulb=Ulb,Xub=Xub,Xlb=Xlb)
     
             # get control input
             z0 = KPmodel.basis(KPmodel.scale(x0[-1,:],state_scale=True)) # x
+            # z0 = KPmodel.lift(KPmodel.scale(x0[-1,:],state_scale=True)) # x
             actions_mpc = KMPC.getMPC(z0,A,B,C)
             actions = KPmodel.scale(actions_mpc,down=False,action_scale=True)
-            actions_north3.append(actions[0])
-            actions_north2.append(actions[1])
+            # actions = KPmodel.scale(actions_mpc,scale_down=False,action_scale=True)
+            # actions = actions.T
+            # actions_north3.append(actions[0])
+            # actions_north2.append(actions[1])
+            # actions_north1.append(actions[2])
+            # actions_central.append(actions[3])
+            # actions_south.append(actions[4])
+            actions_north3.append(actions[4])
+            actions_north2.append(actions[3])
             actions_north1.append(actions[2])
-            actions_central.append(actions[3])
-            actions_south.append(actions[4])
+            actions_central.append(actions[0])
+            actions_south.append(actions[1])
             
             # initialize containers
             xtrue = x0[-1,:].reshape(1,5)
@@ -103,17 +117,27 @@ while not done:
         A = operator[:nk,:nk]
         B = operator[:nk,nk:]
         C = operator[nk:,:nk]
-        xkp = np.vstack((xkp,KPmodel.predict(xtrue[-1,:],umpc[-1,:]).reshape(1,np.size(xkp,1)) ))
+        # A,B,C = KPmodel.update(xtrue[-1,:],umpc[-1,:])
+        xkp_new = KPmodel.predict(xtrue[-1,:],umpc[-1,:]).reshape(1,np.size(xkp,1))
+        xkp = np.vstack((xkp, xkp_new))
         
         # get control input
         z0 = KPmodel.basis(KPmodel.scale(xtrue[-1,:],state_scale=True))
+        # z0 = KPmodel.lift(KPmodel.scale(xtrue[-1,:],state_scale=True))
         actions_mpc = KMPC.getMPC(z0,A,B,C)
         actions = KPmodel.scale(actions_mpc,down=False,action_scale=True)
-        actions_north3.append(actions[0])
-        actions_north2.append(actions[1])
+        # actions = KPmodel.scale(actions_mpc,scale_down=False,action_scale=True)
+        # actions = actions.T
+        # actions_north3.append(actions[0])
+        # actions_north2.append(actions[1])
+        # actions_north1.append(actions[2])
+        # actions_central.append(actions[3])
+        # actions_south.append(actions[4])
+        actions_north3.append(actions[4])
+        actions_north2.append(actions[3])
         actions_north1.append(actions[2])
-        actions_central.append(actions[3])
-        actions_south.append(actions[4])
+        actions_central.append(actions[0])
+        actions_south.append(actions[1])
         umpc = np.vstack((umpc,actions.reshape(1,np.size(umpc,1)) ))
 
         # # record
