@@ -1,17 +1,29 @@
 import numpy as np
 
 class Koopman:
-    def __init__(self,num_basis, weighting=1):
+    def __init__(self, Xub, Xlb, Uub, Ulb, num_basis=2, weighting=0.96):
         """
         potential improvements:
         1. delay
         2. sparse regression to denoise
         """
+        self.n = np.size(Xub)
+        self.m = np.size(Uub)
         self.nk = num_basis
         self.weighting = weighting
+        self.Xub = Xub.reshape(1,self.n)
+        self.Xlb = Xlb.reshape(1,self.n)
+        self.Uub = Uub.reshape(1,self.m)
+        self.Ulb = Ulb.reshape(1,self.m)
 
+        # set scale center and range
+        self.state_range = (self.Xub - self.Xlb) / 2
+        self.state_center = (self.Xub + self.Xlb) / 2
+        self.action_range = (self.Uub - self.Ulb) / 2
+        self.action_center = (self.Uub + self.Ulb) / 2
+        print('Set up scale ranges and centers successfully!')
 
-    def initialization(self, states, actions, Xub, Xlb, Uub, Ulb):
+    def initialization(self, states, actions):
         """
         scale data to [-1,1]
         data = Nt x N
@@ -21,27 +33,28 @@ class Koopman:
         x = C*z
         Koopman library functions: RFF
         """
-        self.n = np.size(states,axis=1)
-        self.m = np.size(actions,axis=1)
-        self.Xub = Xub.reshape(1,self.n)
-        self.Xlb = Xlb.reshape(1,self.n)
-        self.Uub = Uub.reshape(1,self.m)
-        self.Ulb = Ulb.reshape(1,self.m)
-        states_scaled = self.scale(states,state_scale=True)
-        actions_scaled = self.scale(actions,action_scale=True)
-        Nt = np.size(actions,0)
+        # set rff:
+        rff_sigma_gaussian = np.std(states)
+        num_features = int((self.nk - self.n)/2)
+        self.rff_z = np.random.randn(self.n, num_features)/rff_sigma_gaussian
+        print('Set up Random Fourier Features successfully!')
+
+        states_scaled = self.scale(states)
+        actions_scaled = self.scale(actions,state_scale=False)
+        X_scaled = states_scaled[:-1,:]
+        Y_scaled = states_scaled[1:,:]
+        U_scaled = actions_scaled[1:,:] 
+        Nt = np.size(X_scaled,0)
         Weights = np.sqrt(self.weighting)**range(Nt-1,-1,-1)
-        Weights = Weights.reshape(Nt,1)
-        states_weighted = Weights*states_scaled
-        actions_weighted = Weights*actions_scaled
-        self.X = states_weighted[:-1,:]
-        self.Y = states_weighted[1:,:]
-        self.U = actions_weighted[1:,:]
-        self.PsiX = self.lift(self.X)
-        self.PsiY = self.lift(self.Y)
-        self.X = self.X.reshape(self.n,Nt-1)
-        self.Y = self.Y.reshape(self.n,Nt-1)
-        self.U = self.U.reshape(self.m,Nt-1)
+        # Weights = Weights.reshape(Nt,1)
+        self.X = Weights*X_scaled.T
+        self.Y = Weights*Y_scaled.T
+        self.U = Weights*U_scaled.T
+        self.PsiX = self.lift(self.X.T)
+        self.PsiY = self.lift(self.Y.T)
+        # self.X = self.X.reshape(self.n,Nt)
+        # self.Y = self.Y.reshape(self.n,Nt)
+        # self.U = self.U.reshape(self.m,Nt)
         self.Zeta = np.vstack((self.PsiX,self.U))
         non_singular = 0.1
         self.Q = np.matmul(self.PsiY,self.Zeta.T)
@@ -59,40 +72,25 @@ class Koopman:
 
         return self.A, self.B, self.C
 
-    def scale(self, data, scale_down=True, state_scale=False, action_scale=False):
+    def scale(self, data, scale_down=True, state_scale=True):
         """
         data is a Nt x N matrix
         scale down to [-1,1], scale up to stored scaling range
         initialize scaling range with first initialization data set
-        """
-        if data.size != self.n and  data.size != self.m: 
-            if state_scale:
-                max_data = self.Xub
-                min_data = self.Xlb
-                self.state_range = (max_data + min_data) / 2
-                self.state_center = (max_data - min_data) / 2
-            elif action_scale:
-                max_data = self.Uub
-                min_data = self.Ulb
-                self.action_range = (max_data + min_data) / 2
-                self.action_center = (max_data - min_data) / 2
-            else:
-                print("Error scaling data!")
-            
+        """ 
+        if np.shape(data) == (self.m,1) or np.shape(data) == (self.n,1):
+            data = data.T
         if state_scale:
             if scale_down:
                 scaled = (data - self.state_center) / self.state_range
             else:
                 scaled = data*self.state_range + self.state_center
-        elif action_scale:
+        else:
             if scale_down:
                 scaled = (data - self.action_center) / self.action_range
             else:
                 scaled = data*self.action_range + self.action_center
-        else:
-            print("Error scaling direction!")
-            scaled = data
-
+        
         return scaled
 
     def lift(self, data):
@@ -104,16 +102,10 @@ class Koopman:
         RFF sampling rff_z ~ N(0, sigma^2*I_n)
         # RBF
         """
-        if data.shape[1] > 1: 
-            # set rff:
-            rff_sigma_gaussian = np.std(data)
-            num_features = int((self.nk - self.n)/2)
-            rff_z = np.random.normal(0, 1.0/rff_sigma_gaussian, (data.shape[1], num_features))
-            # print('Set up Random Fourier Features successfully!')
-        Q = np.matmul(data,rff_z)
+        Q = np.matmul(data,self.rff_z)
         Fcos = np.cos(Q)
         Fsin = np.sin(Q)
-        F = np.hstack((Fcos, Fsin))
+        F = np.hstack((Fcos, Fsin))/ np.sqrt(np.size(self.rff_z,1))
         Psi = np.hstack((data,F))
         Psi = Psi.T
 
@@ -128,8 +120,8 @@ class Koopman:
         """
         states = states.reshape(1,self.n)
         actions = actions.reshape(1,self.m)
-        states_scaled = self.scale(states,state_scale=True)
-        actions_scaled = self.scale(actions,action_scale=True)
+        states_scaled = self.scale(states)
+        actions_scaled = self.scale(actions,state_scale=False)
         y_new = states_scaled.reshape(self.n,1)
         u_new = actions_scaled.reshape(self.m,1)
         x_new = self.Y[:,-1].reshape(self.n,1)
@@ -152,11 +144,11 @@ class Koopman:
         """
         states = states.reshape(1,self.n)
         actions = actions.reshape(1,self.m)
-        states_scaled = self.scale(states,state_scale=True)
-        actions_scaled = self.scale(actions,action_scale=True)
+        states_scaled = self.scale(states)
+        actions_scaled = self.scale(actions,state_scale=False)
         delta_new = np.vstack([self.lift(states_scaled),actions_scaled.reshape(self.m,1)])
         lift_predicted = np.matmul(self.AB,delta_new)
         predicts_scaled = np.matmul(self.C, lift_predicted)
-        predicted = self.scale(predicts_scaled.reshape(1,self.n),scale_down=False,state_scale=True)
+        predicted = self.scale(predicts_scaled.reshape(1,self.n),scale_down=False)
 
         return predicted
