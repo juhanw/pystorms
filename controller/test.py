@@ -2,9 +2,10 @@
 import pystorms
 # import sys
 # sys.path.append("/controller")
-from denseMPC import denseMPC
-from Koopman import Koopman 
-# from Koopman_rewrite import Koopman
+# from denseMPC import MPC
+from MPC_rewrite import MPC
+# from Koopman import Koopman 
+from Koopman_rewrite import Koopman
 # Python Scientific Computing Stack
 import numpy as np
 import pandas as pd
@@ -37,7 +38,8 @@ n = Xub.size
 m = Uub.size
 nk = n + n_basis
 n0 = 20    #n0 > nk + m
-KPmodel = Koopman(nk)
+KPmodel = Koopman(Xub,Xlb,Uub,Ulb,nk)
+KMPC = MPC(KPmodel.scale(Xub),KPmodel.scale(Xlb),KPmodel.scale(Uub,state_scale=False),KPmodel.scale(Ulb,state_scale=False))
 
 while not done:
     if  t <= n0:
@@ -67,25 +69,16 @@ while not done:
             x0.reshape(n0+1,n)
             
             # initialize Koopman model:
-            operator = KPmodel.initOperator(x0,u,Xub,Xlb,Uub,Ulb)
-            A = operator[:nk,:nk]
-            B = operator[:nk,nk:]
-            C = operator[nk:,:nk]
-            # A,B,C = KPmodel.initialization(x0,u,Xub,Xlb,Uub,Ulb)
+            A,B,C = KPmodel.initialization(x0,u)
             
             # initialize controller
-            # Zub = KPmodel.basis(Xub)
-            # Zlb = KPmodel.basis(Xlb)
-            # KMPC = denseMPC(A,B,C,Uub=Uub,Ulb=Ulb,Zub=Zub,Zlb=Zlb)
-            KMPC = denseMPC(A,B,C,Uub=Uub,Ulb=Ulb,Xub=Xub,Xlb=Xlb)
+            # KMPC = MPC(A,B,C,Uub=Uub,Ulb=Ulb,Xub=Xub,Xlb=Xlb)
     
             # get control input
-            z0 = KPmodel.basis(KPmodel.scale(x0[-1,:],state_scale=True)) # x
-            # z0 = KPmodel.lift(KPmodel.scale(x0[-1,:],state_scale=True)) # x
+            z0 = KPmodel.lift(KPmodel.scale(x0[-1,:])) # x
             actions_mpc = KMPC.getMPC(z0,A,B,C)
-            actions = KPmodel.scale(actions_mpc,down=False,action_scale=True)
-            # actions = KPmodel.scale(actions_mpc,scale_down=False,action_scale=True)
-            # actions = actions.T
+            actions = KPmodel.scale(actions_mpc,scale_down=False,state_scale=False)
+            actions = actions.T
             # actions_north3.append(actions[0])
             # actions_north2.append(actions[1])
             # actions_north1.append(actions[2])
@@ -113,21 +106,15 @@ while not done:
         xtrue = np.vstack((xtrue,state[:-1].reshape(1,5) ))
 
         # update Koopman model
-        operator = KPmodel.updateOperator(xtrue[-1,:],umpc[-1,:])
-        A = operator[:nk,:nk]
-        B = operator[:nk,nk:]
-        C = operator[nk:,:nk]
-        # A,B,C = KPmodel.update(xtrue[-1,:],umpc[-1,:])
+        A,B,C = KPmodel.update(xtrue[-1,:],umpc[-1,:])
         xkp_new = KPmodel.predict(xtrue[-1,:],umpc[-1,:]).reshape(1,np.size(xkp,1))
         xkp = np.vstack((xkp, xkp_new))
         
         # get control input
-        z0 = KPmodel.basis(KPmodel.scale(xtrue[-1,:],state_scale=True))
-        # z0 = KPmodel.lift(KPmodel.scale(xtrue[-1,:],state_scale=True))
+        z0 = KPmodel.lift(KPmodel.scale(xtrue[-1,:]))
         actions_mpc = KMPC.getMPC(z0,A,B,C)
-        actions = KPmodel.scale(actions_mpc,down=False,action_scale=True)
-        # actions = KPmodel.scale(actions_mpc,scale_down=False,action_scale=True)
-        # actions = actions.T
+        actions = KPmodel.scale(actions_mpc,scale_down=False,state_scale=False)
+        actions = actions.T
         # actions_north3.append(actions[0])
         # actions_north2.append(actions[1])
         # actions_north1.append(actions[2])
@@ -148,7 +135,7 @@ while not done:
 
     print(t, "is time")
     t = t + 1
-    if t > 150:
+    if t > 100:
         break
     
 equalfilling_perf = sum(env_equalfilling.data_log["performance_measure"])

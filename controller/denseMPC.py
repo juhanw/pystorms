@@ -5,7 +5,7 @@ import scipy.linalg as la
 import cvxopt
 from qpsolvers import solve_qp
 
-class denseMPC:
+class MPC:
     """
     Dynamics:
     z^+ = A*z + B*u
@@ -132,7 +132,7 @@ class denseMPC:
         # G = L
         # h = -np.matmul(M,z0)+self.bin
         P = cvxopt.matrix(2*self.H)
-        q = cvxopt.matrix(np.matmul(z0.T,self.f).T)
+        q = cvxopt.matrix(np.matmul(self.f.T,z0))
         G = cvxopt.matrix(L)
         h = cvxopt.matrix(-np.matmul(M,z0)+self.bin)
         try:
