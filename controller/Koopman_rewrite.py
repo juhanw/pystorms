@@ -17,10 +17,14 @@ class Koopman:
         self.Ulb = Ulb.reshape(1,self.m)
 
         # set scale center and range
-        self.state_range = (self.Xub - self.Xlb) / 2
-        self.state_center = (self.Xub + self.Xlb) / 2
-        self.action_range = (self.Uub - self.Ulb) / 2
-        self.action_center = (self.Uub + self.Ulb) / 2
+        Xub_scale = self.Xub + 1
+        Xlb_scale = self.Xlb - 1
+        Uub_scale = self.Uub + 1
+        Ulb_scale = self.Ulb - 1
+        self.state_range = (Xub_scale - Xlb_scale) / 2
+        self.state_center = (Xub_scale + Xlb_scale) / 2
+        self.action_range = (Uub_scale - Ulb_scale) / 2
+        self.action_center = (Uub_scale + Ulb_scale) / 2
         print('Set up scale ranges and centers successfully!')
 
     def initialization(self, states, actions):
@@ -65,6 +69,7 @@ class Koopman:
         self.B = self.AB[:,self.nk:]
         self.C = np.hstack((np.eye(self.n),np.zeros((self.n,self.nk-self.n))))
         self.G = self.G /self.weighting
+        self.G = (self.G + self.G.T)/2
         # Evaluate regression accuracy:
         error = self.Y - np.matmul(self.C,np.matmul(self.AB,self.Zeta))
         NRMSE_Koopman = 100*np.sqrt(sum(np.linalg.norm(error,axis=0)**2)) / np.sqrt(sum(np.linalg.norm(self.Y,axis=0)**2))
@@ -127,12 +132,17 @@ class Koopman:
         x_new = self.Y[:,-1].reshape(self.n,1)
         delta = np.vstack((self.lift(x_new.reshape(1,self.n)),u_new))
         calc_easy = np.matmul(self.G,delta)
+        # if max(calc_easy) > 1000:
+        #     print("SOmething wrong")
         beta = 1/(1 + np.matmul(delta.T,calc_easy))
         innovation = self.lift(y_new.reshape(1,self.n)) - np.matmul(self.AB,delta)
         self.AB += beta*np.matmul(innovation,calc_easy.T)
         self.A = self.AB[:,:self.nk]
+        if np.max(self.A) > 1000:
+            print("SOmething wrong") # G has become negative definite det = -5e136 <-- calc_easy exp grow
         self.B = self.AB[:,self.nk:]
         self.G = (self.G - beta*np.matmul(calc_easy,calc_easy.T))/self.weighting
+        self.G = (self.G + self.G.T)/2
         self.X = np.hstack((self.X,x_new))
         self.Y = np.hstack((self.Y,y_new))
         self.U= np.hstack((self.U,u_new))

@@ -33,7 +33,7 @@ Uub = np.ones((1,5))
 Ulb = np.zeros((1,5))
 
 t = 0
-n_basis = 4
+n_basis = 6
 n = Xub.size
 m = Uub.size
 nk = n + n_basis
@@ -135,8 +135,8 @@ while not done:
 
     print(t, "is time")
     t = t + 1
-    if t > 100:
-        break
+    # if t > 100:
+    #     break
     
 equalfilling_perf = sum(env_equalfilling.data_log["performance_measure"])
 
@@ -154,11 +154,16 @@ plt.rcParams['figure.figsize'] = [20, 15]
 plt.rcParams['figure.dpi'] = 100 # 200 e.g. is really fine, but slower
 
 # plot on Koopman performance ===================================================
-# t_plot = range(len(xkp))
+# Evaluate regression accuracy:
+xkp_all = xkp[:-1,:]
+qoi = 20
+error = xtrue - xkp_all
+NRMSE_predict = 100*np.sqrt(sum(np.linalg.norm(error[qoi:,:],axis=0)**2)) / np.sqrt(sum(np.linalg.norm(xtrue[qoi:,:],axis=0)**2))
+print(NRMSE_predict,"%")
 for i in range(5):
     plt.subplot(2,3,i+1)
-    plt.plot(xtrue[:,i], '-')
-    plt.plot(xkp[:,i], '--')
+    plt.plot(xtrue[qoi:,i], '-')
+    plt.plot(xkp_all[qoi:,i], '--')
 
 plt.tight_layout()
 plt.show()
