@@ -17,10 +17,10 @@ class Koopman:
         self.Ulb = Ulb.reshape(1,self.m)
 
         # set scale center and range
-        Xub_scale = self.Xub + 1
-        Xlb_scale = self.Xlb - 1
-        Uub_scale = self.Uub + 1
-        Ulb_scale = self.Ulb - 1
+        Xub_scale = self.Xub + 0.3*(self.Xub-self.Xlb)
+        Xlb_scale = self.Xlb - 0.3*(self.Xub-self.Xlb)
+        Uub_scale = self.Uub + 0.3*(self.Uub-self.Ulb)
+        Ulb_scale = self.Ulb - 0.3*(self.Uub-self.Ulb)
         self.state_range = (Xub_scale - Xlb_scale) / 2
         self.state_center = (Xub_scale + Xlb_scale) / 2
         self.action_range = (Uub_scale - Ulb_scale) / 2
@@ -60,9 +60,9 @@ class Koopman:
         # self.Y = self.Y.reshape(self.n,Nt)
         # self.U = self.U.reshape(self.m,Nt)
         self.Zeta = np.vstack((self.PsiX,self.U))
-        non_singular = 0.1
+        self.non_singular = 0.1
         self.Q = np.matmul(self.PsiY,self.Zeta.T)
-        self.G = np.linalg.inv(np.matmul(self.Zeta,self.Zeta.T) + non_singular*np.eye(len(self.Zeta)))
+        self.G = np.linalg.inv(np.matmul(self.Zeta,self.Zeta.T) + self.non_singular*np.eye(len(self.Zeta)))
         # self.G = np.linalg.inv(np.matmul(self.Zeta,self.Zeta.T))
         self.AB = np.matmul(self.Q,self.G)
         self.A = self.AB[:,:self.nk]
@@ -143,9 +143,20 @@ class Koopman:
         self.B = self.AB[:,self.nk:]
         self.G = (self.G - beta*np.matmul(calc_easy,calc_easy.T))/self.weighting
         self.G = (self.G + self.G.T)/2
+        print(np.linalg.det(self.G))
+        if np.linalg.det(self.G) < 0:
+            temp = beta*np.matmul(calc_easy,calc_easy.T)
+            rank = np.linalg.eigvals(temp)
+            print(min(rank))
+            GG = np.linalg.inv(np.matmul(self.Zeta,self.Zeta.T) + self.non_singular*np.eye(len(self.Zeta)))
+            GG = GG /self.weighting
+            GG = (GG + GG.T)/2
+            self.G = GG
+        
         self.X = np.hstack((self.X,x_new))
         self.Y = np.hstack((self.Y,y_new))
         self.U= np.hstack((self.U,u_new))
+        self.Zeta = np.hstack((self.Zeta,delta))
         return self.A, self.B, self.C
 
     def predict(self, states, actions):
