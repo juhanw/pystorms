@@ -6,10 +6,11 @@ class MPC:
     """
     docstring
     """
-    def __init__(self, Xub, Xlb, Uub, Ulb, num_horizon = 10):
+    def __init__(self, Xub, Xlb, Uub, Ulb, num_horizon=10, Uslop=0.05, Usmooth=0.1):
         """
         X, U bounds have already been scaled down
         """
+        dt = 1
         self.nh = num_horizon
         self.n = np.size(Xub)
         self.m = np.size(Uub)
@@ -17,6 +18,8 @@ class MPC:
         self.Xlb = Xlb.reshape(self.n,1)
         self.Uub = Uub.reshape(self.m,1)
         self.Ulb = Ulb.reshape(self.m,1)
+        self.Uslop = Uslop*np.mean(self.Uub-self.Ulb)
+        self.Usmooth = dt**2*Usmooth*np.mean(self.Uub-self.Ulb)
     
 
     def set_cost(self, z0, A, B, C, q=1, qh=1, r=0.1):
@@ -51,11 +54,36 @@ class MPC:
         Xlb < xi < Xub
         xi = zi[1:n,:]
         """
+        # input constraints
         Au_unit = np.vstack([np.eye(self.m),-np.eye(self.m)])
         Au = np.kron(np.eye(self.nh),Au_unit)
         bu_unit = np.vstack([self.Uub,-self.Ulb])
         bu = np.kron(np.ones((self.nh,1)),bu_unit)
+        
+        # slop constraints: u1 - u0 < uslop
+        Au_km = np.kron(np.eye(self.nh-1),-np.eye(self.m))
+        Au_km = np.hstack([Au_km,np.zeros((np.size(Au_km,0),self.m))])
+        Au_k = np.kron(np.eye(self.nh-1),np.eye(self.m))
+        Au_k = np.hstack([np.zeros((np.size(Au_k,0),self.m)),Au_k])
+        Au_slop_block = Au_km + Au_k
+        Au_slop = np.vstack([Au_slop_block, -Au_slop_block])
+        bu_slop = np.kron(np.ones((np.size(Au_slop,0),1)), self.Uslop)
 
+        # smooth constraints: (u2-u1) - (u1-u0) < usmooth
+        Au_i0 = np.kron(np.eye(self.nh-2),np.eye(self.m))
+        Au_i0 = np.hstack([Au_i0,np.zeros((np.size(Au_i0,0),2*self.m))])
+        Au_i1 = np.kron(np.eye(self.nh-2),-2*np.eye(self.m))
+        Au_i1 = np.hstack([np.zeros((np.size(Au_i1,0),self.m)),Au_i1,np.zeros((np.size(Au_i1,0),self.m))])
+        Au_i2 = np.kron(np.eye(self.nh-2),np.eye(self.m))
+        Au_i2 = np.hstack([np.zeros((np.size(Au_i2,0),2*self.m)),Au_i2])
+        Au_smooth_block = Au_i0 + Au_i1 + Au_i2
+        Au_smooth = np.vstack([Au_smooth_block,-Au_smooth_block])
+        bu_smooth = np.kron(np.ones((np.size(Au_smooth,0),1)),self.Usmooth)
+
+        Au = np.vstack([Au, Au_slop, Au_smooth])
+        bu = np.vstack([bu, bu_slop, bu_smooth])
+
+        # state constraints
         Az_unit = np.vstack([np.eye(self.n,self.nk),-np.eye(self.n,self.nk)])
         Az = np.kron(np.eye(self.nh),Az_unit)
         bz_unit = np.vstack([self.Xub,-self.Xlb])
@@ -63,7 +91,6 @@ class MPC:
 
         Az_U = np.matmul(Az,self.Su)
         Az_z0 = np.matmul(Az,self.Sz)
-        
         self.L = np.vstack([Au,Az_U])
         self.w = np.vstack([bu,bz-np.matmul(Az_z0,z0)])
 
@@ -88,5 +115,5 @@ class MPC:
                 u0 = np.asarray(sol['x'][:self.m])
             except:
                 print("Error Constraints!") # why there is no Ulb/Uub effect???
-                u0 = np.random.uniform(-1,1,5)
+                u0 = None
         return u0
