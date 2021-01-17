@@ -3,7 +3,8 @@ import pystorms
 # import sys
 # sys.path.append("/controller")
 # from denseMPC import MPC
-from MPC_rewrite import MPC
+# from MPC_rewrite import MPC
+from MPC_soft import MPC
 # from Koopman import Koopman 
 from Koopman_rewrite import Koopman
 # Python Scientific Computing Stack
@@ -25,31 +26,32 @@ actions_north1 = []
 actions_central = []
 actions_south = []
 settings = np.ones(5)
-# Xub = np.asarray([11.99, 6.59, 5.92, 5.7, 9.5]) # [N3, N2, N1, BC, BS]
-# Xlb = np.asarray([5.28, 4.04, 2.11, 2.21, 0])
-Xub = np.asarray([5.7, 9.5, 5.92, 6.59, 11.99]) # [BC, BS, N1, N2, N3]
-Xlb = np.asarray([2.21, 0, 2.11, 4.04, 5.28])
+Xub_extreme = np.asarray([5.7, 9.5, 5.92, 6.59, 11.99]) # [BC, BS, N1, N2, N3]
+Xlb_extreme = np.asarray([2.21, 0, 2.11, 4.04, 5.28])
+Xub_allowed = np.asarray([3.8, 6.55, 5.8, 5.04, 5.92])
+Xlb_allowed = np.asarray([3.28, 0, 5.2, 4.44, 5.32])
 Uub = np.ones((1,5))
 Ulb = np.zeros((1,5))
 
 t = 0
 n_basis = 6
-n = Xub.size
+n = Xub_extreme.size
 m = Uub.size
 nk = n + n_basis
 n0 = 20    #n0 > nk + m
-KPmodel = Koopman(Xub,Xlb,Uub,Ulb,nk)
-KMPC = MPC(KPmodel.scale(Xub),KPmodel.scale(Xlb),KPmodel.scale(Uub,state_scale=False),KPmodel.scale(Ulb,state_scale=False))
+KPmodel = Koopman(Xub_extreme,Xlb_extreme,Uub,Ulb,nk)
+Xub_scaled = KPmodel.scale(Xub_extreme)
+Xlb_scaled = KPmodel.scale(Xlb_extreme)
+Xub_allowed_scaled = KPmodel.scale(Xub_allowed)
+Xlb_allowed_scaled = KPmodel.scale(Xlb_allowed)
+Uub_scaled = KPmodel.scale(Uub,state_scale=False)
+Ulb_scaled = KPmodel.scale(Ulb,state_scale=False)
+KMPC = MPC(Uub_scaled,Ulb_scaled, Xub_soft= Xub_scaled, Xlb_soft = Xlb_scaled)
 
 while not done:
     if  t <= n0:
-        actions =  np.random.uniform(0,1,5)
-        u.append(actions) 
-        # actions_north3.append(actions[0])
-        # actions_north2.append(actions[1])
-        # actions_north1.append(actions[2])
-        # actions_central.append(actions[3])
-        # actions_south.append(actions[4])
+        actions =  np.random.uniform(0,0.5,5)
+        u.append(actions)
         actions_north3.append(actions[4])
         actions_north2.append(actions[3])
         actions_north1.append(actions[2])
@@ -58,8 +60,6 @@ while not done:
 
         done = env_equalfilling.step(actions)
         state = env_equalfilling.state()
-        # states = [state[2], state[1], state[0], state[4], state[5]]
-        # x0 = np.vstack((x0,state[1:].reshape(1,5)))
         x0.append(state[:-1])
 
         if t == n0:
@@ -70,10 +70,7 @@ while not done:
             
             # initialize Koopman model:
             A,B,C = KPmodel.initialization(x0,u)
-            
-            # initialize controller
-            # KMPC = MPC(A,B,C,Uub=Uub,Ulb=Ulb,Xub=Xub,Xlb=Xlb)
-    
+
             # get control input
             z0 = KPmodel.lift(KPmodel.scale(x0[-1,:])) # x
             actions_mpc = KMPC.getMPC(z0,A,B,C)
@@ -81,11 +78,6 @@ while not done:
                 actions_mpc = u[-1,:]
             actions = KPmodel.scale(actions_mpc,scale_down=False,state_scale=False)
             actions = actions.T
-            # actions_north3.append(actions[0])
-            # actions_north2.append(actions[1])
-            # actions_north1.append(actions[2])
-            # actions_central.append(actions[3])
-            # actions_south.append(actions[4])
             actions_north3.append(actions[4])
             actions_north2.append(actions[3])
             actions_north1.append(actions[2])
@@ -97,9 +89,6 @@ while not done:
             xkp = xtrue
             umpc = actions.reshape(1,5)
             xkp = np.vstack((xkp,KPmodel.predict(xtrue,umpc) ))
-            # done = env_equalfilling.step(umpc[-1,:])
-            # state = env_equalfilling.state() # y
-            # xtrue = np.hstack((xtrue,state[1:].reshape(1,5)))
 
     else:
         done = env_equalfilling.step(umpc[-1,:])
@@ -119,11 +108,6 @@ while not done:
             actions_mpc = umpc[-1,:]
         actions = KPmodel.scale(actions_mpc,scale_down=False,state_scale=False)
         actions = actions.T
-        # actions_north3.append(actions[0])
-        # actions_north2.append(actions[1])
-        # actions_north1.append(actions[2])
-        # actions_central.append(actions[3])
-        # actions_south.append(actions[4])
         actions_north3.append(actions[4])
         actions_north2.append(actions[3])
         actions_north1.append(actions[2])
@@ -131,15 +115,9 @@ while not done:
         actions_south.append(actions[1])
         umpc = np.vstack((umpc,actions.reshape(1,np.size(umpc,1)) ))
 
-        # # record
-        # umpc = np.vstack((umpc,actions.reshape(1,np.size(umpc,1)) ))
-        # done = env_equalfilling.step(actions)
-        # state = env_equalfilling.state() # y
-        # xtrue = np.vstack((xtrue,state[1:].reshape(1,5) ))
-
     print(t, "is time")
     t = t + 1
-    # if t > 100:
+    # if t > 14000:
     #     break
     
 equalfilling_perf = sum(env_equalfilling.data_log["performance_measure"])
@@ -166,9 +144,10 @@ NRMSE_predict = 100*np.sqrt(sum(np.linalg.norm(error[qoi:,:],axis=0)**2)) / np.s
 print(NRMSE_predict,"%")
 for i in range(5):
     plt.subplot(2,3,i+1)
-    plt.plot(xtrue[qoi:,i], '-')
-    plt.plot(xkp_all[qoi:,i], '--')
-
+    plt.plot(xtrue[qoi:,i], '-', label = "Ground Truth")
+    plt.plot(xkp_all[qoi:,i], '--', label = "Koopman model")
+    plt.title("state"+str(i+1))
+plt.legend(loc="upper right", borderaxespad=0.1)
 plt.tight_layout()
 plt.show()
 # print("done")
