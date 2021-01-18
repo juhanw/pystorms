@@ -4,7 +4,8 @@ import pystorms
 # sys.path.append("/controller")
 # from denseMPC import MPC
 # from MPC_rewrite import MPC
-from MPC_soft import MPC
+# from MPC_soft import MPC
+from MPC_smooth import MPC
 # from Koopman import Koopman 
 from Koopman_rewrite import Koopman
 # Python Scientific Computing Stack
@@ -73,7 +74,8 @@ while not done:
 
             # get control input
             z0 = KPmodel.lift(KPmodel.scale(x0[-1,:])) # x
-            actions_mpc = KMPC.getMPC(z0,A,B,C)
+            ulast_scaled = KPmodel.scale(u[-1,:],state_scale=False)
+            actions_mpc = KMPC.getMPC(z0,ulast_scaled,A,B,C)
             if actions_mpc is None:
                 actions_mpc = u[-1,:]
             actions = KPmodel.scale(actions_mpc,scale_down=False,state_scale=False)
@@ -103,7 +105,8 @@ while not done:
         
         # get control input
         z0 = KPmodel.lift(KPmodel.scale(xtrue[-1,:]))
-        actions_mpc = KMPC.getMPC(z0,A,B,C)
+        ulast_scaled = KPmodel.scale(umpc[-1,:],state_scale=False)
+        actions_mpc = KMPC.getMPC(z0,ulast_scaled,A,B,C)
         if actions_mpc is None:
             actions_mpc = umpc[-1,:]
         actions = KPmodel.scale(actions_mpc,scale_down=False,state_scale=False)
