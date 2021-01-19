@@ -59,14 +59,14 @@ class MPC:
 
         self.Q = np.kron(np.eye(self.nh),q*np.eye(self.n))
         self.Q = sci_la.block_diag(self.Q,qh*np.eye(self.n))
-        self.R = np.kron(np.eye(self.nh),r*np.eye(self.m))
-        self.R = sci_la.block_diag(0*np.eye(self.m),self.R)
+        self.R = np.kron(np.eye(self.nh+1),r*np.eye(self.m))
+        # self.R = sci_la.block_diag(0*np.eye(self.m),self.R)
         self.Cbig = np.kron(np.eye(self.nh+1),C)
         CSu = np.matmul(self.Cbig,self.Su)
         self.H = np.matmul(CSu.T,np.matmul(self.Q,CSu)) + self.R
         calc_easy = np.matmul(self.Cbig,np.matmul(self.Sz,z0))
         self.f = 2*np.matmul(calc_easy.T,np.matmul(self.Q,CSu)) #row vector
-        self.f[:,:self.m] = np.zeros((1,self.m))
+        # self.f[:,:self.m] = np.zeros((1,self.m))
 
         if self.Xub_soft is not None:
             self.H = sci_la.block_diag(self.H,0*np.eye(self.nslack))
