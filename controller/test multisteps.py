@@ -131,9 +131,13 @@ while not done:
         xkp_all = xkp[:-1,:]
         qoi = t-50
         error = xtrue - xkp_all
-        NRMSE_predict = 100*np.sqrt(sum(np.linalg.norm(error[qoi:,:],axis=0)**2)) / np.sqrt(sum(np.linalg.norm(xtrue[qoi:,:],axis=0)**2))
-        if NRMSE_predict < 0.5 and qoi > 0:
-            print(NRMSE_predict)
+        rmse_square = error**2
+        rmse_each = np.sqrt(np.sum(rmse_square,0)/np.size(rmse_square,0))
+        rmse_mean = np.mean(xtrue,0)
+        nrmse_each = rmse_each/rmse_mean * 100
+        # NRMSE_predict = 100*np.sqrt(sum(np.linalg.norm(error[qoi:,:],axis=0)**2)) / np.sqrt(sum(np.linalg.norm(xtrue[qoi:,:],axis=0)**2))
+        if nrmse_each.any() < 0.5 and qoi > 0:
+            print(nrmse_each)
 
     print(t, "is time")
     t = t + 1
@@ -161,19 +165,31 @@ plt.rcParams['figure.dpi'] = 100 # 200 e.g. is really fine, but slower
 xkp_all = xkp[:-1,:]
 qoi = 0
 error = xtrue - xkp_all
-NRMSE_predict = 100*np.sqrt(sum(np.linalg.norm(error[qoi:,:],axis=0)**2)) / np.sqrt(sum(np.linalg.norm(xtrue[qoi:,:],axis=0)**2))
-print(NRMSE_predict,"%")
-label1 = "Koopman model NRMSE = "+str(round(NRMSE_predict,3))+"%"
+rmse_square = error**2
+rmse_each = np.sqrt(np.sum(rmse_square,0)/np.size(rmse_square,0))
+rmse_mean = np.mean(xtrue,0)
+nrmse_each = rmse_each/rmse_mean * 100
+# NRMSE_predict = 100*np.sqrt(sum(np.linalg.norm(error[qoi:,:],axis=0)**2)) / np.sqrt(sum(np.linalg.norm(xtrue[qoi:,:],axis=0)**2))
+print(nrmse_each,"%")
 for i in range(5):
+    label1 = "Koopman model NRMSE = "+str(round(nrmse_each[i],3))+"%"
     plt.subplot(2,3,i+1)
     plt.plot(xtrue[qoi:,i], '-', label = "Ground Truth")
     plt.plot(xkp_all[qoi:,i], '--', label = label1)
     plt.title("state"+str(i+1))
-plt.legend(loc="upper right", borderaxespad=0.1)
+    plt.legend(loc="upper right", borderaxespad=0.1)
 plt.tight_layout()
 plt.show()
 # print("done")
-
+for i in range(5):
+    label1 = "Koopman model NRMSE = "+str(round(nrmse_each[i],3))+"%"
+    plt.subplot(2,3,i+1)
+    plt.plot(error[qoi:,i], '-', label = "Absolute Error")
+    plt.title("state"+str(i+1))
+    plt.legend(loc="upper right", borderaxespad=0.1)
+    plt.ylim([-0.6,0.6])
+plt.tight_layout()
+plt.show()
 # '''
 # plot on states =============================================================
 plotenvironment = env_equalfilling
