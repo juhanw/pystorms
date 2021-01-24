@@ -6,17 +6,28 @@ class MPC:
     """
     docstring
     """
-    def __init__(self, Uub, Ulb, Xub_soft=None, Xlb_soft=None, Xub_hard=None, Xlb_hard=None, num_horizon=10, Uslop=0.005, Usmooth=0.01):
+    def __init__(self, Uub=None, Ulb=None, Xub_soft=None, Xlb_soft=None, Xub_hard=None, Xlb_hard=None, num_horizon=5, Uslop=0.005, Usmooth=0.01):
         """
         X, U bounds have already been scaled down
         """
         self.nh = num_horizon
         dt = 1/self.nh
         self.m = np.size(Uub)
-        self.Uub = Uub.reshape(self.m,1)
-        self.Ulb = Ulb.reshape(self.m,1)
-        self.Uslop = dt*Uslop*np.mean(self.Uub-self.Ulb)
-        self.Usmooth = dt**2*Usmooth*np.mean(self.Uub-self.Ulb)
+        if Uub is not None:
+            self.Uub = Uub.reshape(self.m,1)
+        else:
+            self.Uub = None
+        if Ulb is not None:
+            self.Ulb = Ulb.reshape(self.m,1)
+        else:
+            self.Ulb = None
+        if Uub is not None and Ulb is not None:
+            self.Uslop = dt*Uslop*np.mean(self.Uub-self.Ulb)
+            self.Usmooth = dt**2*Usmooth*np.mean(self.Uub-self.Ulb)
+        else:
+            self.Uslop = None
+            self.Usmooth = None
+
         if Xub_soft is not None:
             self.n = np.size(Xub_soft)
             self.Xub_soft = Xub_soft.reshape(self.n,1)
