@@ -36,7 +36,7 @@ Uub = np.ones((1,5))
 Ulb = np.zeros((1,5))
 
 t = 0
-tmulti = 30
+tmulti = 100
 n_basis = 6
 n = Xub_extreme.size
 m = Uub.size
@@ -106,6 +106,7 @@ while not done:
             A,B,C = KPmodel.update(xtrue[-1,:],xtrue[-2,:],umpc[-1,:])
             t1 = t
             xkp_new = KPmodel.predict(xtrue[-1,:],umpc[-1,:]).reshape(1,np.size(xkp,1))
+            xkp[-1,:] = xtrue[-1,:]
             xkp = np.vstack((xkp, xkp_new))
             # get control input
             z0 = KPmodel.lift(KPmodel.scale(xtrue[-1,:]))
@@ -141,7 +142,7 @@ while not done:
 
     print(t, "is time")
     t = t + 1
-    if t > 3500:
+    if t > 4000:
         # break
         print(t, "is time")
     
@@ -184,73 +185,124 @@ plt.show()
 for i in range(5):
     label1 = "Koopman model NRMSE = "+str(round(nrmse_each[i],3))+"%"
     plt.subplot(2,3,i+1)
-    plt.plot(error[qoi:,i], '-', label = "Absolute Error")
+    plt.plot(error[qoi:,i], '-')
     plt.title("state"+str(i+1))
     plt.legend(loc="upper right", borderaxespad=0.1)
     plt.ylim([-0.6,0.6])
+    plt.ylabel("Absolute Error [m]")
+    plt.xlabel("Simulation step")
 plt.tight_layout()
+plt.subplot(2,3,6)
+plt.plot(error[qoi:,1], '-', label = "Zoomed in")
+plt.title("state"+str(1+1))
+plt.legend(loc="upper right", borderaxespad=0.1)
+plt.ylim([-0.6,0.6])
 plt.show()
 # '''
 # plot on states =============================================================
 plotenvironment = env_equalfilling
 
-plt.subplot(2, 3, 1)
-plt.plot(plotenvironment.data_log["flow"]["conduit_Eout"], color=colors_hex[0])
-plt.axhline(12.0, color="r")
-plt.ylim([0,20])
-plt.title("Conduit East Out")
-plt.ylabel("Flow")
+# plt.subplot(2, 3, 1)
+# plt.plot(plotenvironment.data_log["flow"]["conduit_Eout"], color=colors_hex[0])
+# plt.axhline(12.0, color="r")
+# plt.ylim([0,20])
+# plt.title("Conduit East Out")
+# plt.ylabel("Flow")
 
-plt.subplot(2, 3, 2)
-plt.plot(plotenvironment.data_log["depthN"]["basin_C"], color=colors_hex[0])
+plt.subplot(2, 3, 1)
+plt.plot(plotenvironment.data_log["depthN"]["basin_C"], color=colors_hex[0],label = "Ground Truth")
+label1 = "Koopman Prediction (NRMSE = "+str(round(nrmse_each[0],3))+"%)"
+plt.plot(xkp_all[qoi:,0], '--', label = label1,color=colors_hex[1])
+plt.legend(loc="upper right", borderaxespad=0.1,prop={'size': 14})
+plt.xticks(fontsize=12)
+plt.yticks(fontsize=12)
+plt.xlabel('Simulation step',fontsize=14)
 plt.axhline(5.7, color="r")
-plt.axhline(3.8, color="k")
-plt.axhline(3.28, color="k")
+# plt.axhline(3.8, color="k")
+# plt.axhline(3.28, color="k")
 plt.axhline(2.21, color="r")
 plt.ylim([0,11.5])
-plt.ylabel("Depth")
+plt.ylabel("Depth",fontsize=14)
 plt.title("Central Basin")
 
 
-plt.subplot(2, 3, 3)
-plt.plot(plotenvironment.data_log["depthN"]["basin_S"], color=colors_hex[0])
+plt.subplot(2, 3, 2)
+plt.plot(plotenvironment.data_log["depthN"]["basin_S"], color=colors_hex[0],label = "Ground Truth")
+label1 = "Koopman Prediction (NRMSE = "+str(round(nrmse_each[1],3))+"%)"
+plt.plot(xkp_all[qoi:,1], '--', label = label1,color=colors_hex[1])
+plt.legend(loc="upper right", borderaxespad=0.1,prop={'size': 14})
+plt.xticks(fontsize=12)
+plt.yticks(fontsize=12)
+plt.xlabel('Simulation step',fontsize=14)
 plt.axhline(9.5, color="r")
-plt.axhline(6.55, color="k")
+# plt.axhline(6.55, color="k")
 plt.ylim([0,12])
-plt.ylabel("Depth")
+plt.ylabel("Depth",fontsize=14)
 plt.title("South Basin")
 
-plt.subplot(2, 3, 4)
-plt.plot(plotenvironment.data_log["depthN"]["basin_N1"], color=colors_hex[0])
+plt.subplot(2, 3, 3)
+plt.plot(plotenvironment.data_log["depthN"]["basin_N1"], color=colors_hex[0],label = "Ground Truth")
+label1 = "Koopman Prediction (NRMSE = "+str(round(nrmse_each[2],3))+"%)"
+plt.plot(xkp_all[qoi:,2], '--', label = label1,color=colors_hex[1])
+plt.legend(loc="upper right", borderaxespad=0.1,prop={'size': 14})
+plt.xticks(fontsize=12)
+plt.yticks(fontsize=12)
+plt.xlabel('Simulation step',fontsize=14)
 plt.axhline(5.92, color="r")
 plt.axhline(2.11, color="r")
-plt.axhline(5.8, color="k")
-plt.axhline(5.2, color="k")
+# plt.axhline(5.8, color="k")
+# plt.axhline(5.2, color="k")
 plt.ylim([0,12])
-plt.ylabel("Depth")
+plt.ylabel("Depth",fontsize=14)
 plt.title("Basin North1")
 
-plt.subplot(2, 3, 5)
-plt.plot(plotenvironment.data_log["depthN"]["basin_N2"], color=colors_hex[0])
+plt.subplot(2, 3, 4)
+plt.plot(plotenvironment.data_log["depthN"]["basin_N2"], color=colors_hex[0],label = "Ground Truth")
+label1 = "Koopman Prediction (NRMSE = "+str(round(nrmse_each[3],3))+"%)"
+plt.plot(xkp_all[qoi:,3], '--', label = label1,color=colors_hex[1])
+plt.legend(loc="upper right", borderaxespad=0.1,prop={'size': 14})
+plt.xticks(fontsize=12)
+plt.yticks(fontsize=12)
+plt.xlabel('Simulation step',fontsize=14)
 plt.axhline(6.59, color="r")
-plt.axhline(5.04, color="k")
-plt.axhline(4.44, color="k")
+# plt.axhline(5.04, color="k")
+# plt.axhline(4.44, color="k")
 plt.axhline(4.04, color="r")
 plt.ylim([0,12])
-plt.ylabel("Depth")
+plt.ylabel("Depth",fontsize=14)
 plt.title("Basin North2")
 
-plt.subplot(2, 3, 6)
-plt.plot(plotenvironment.data_log["depthN"]["basin_N3"], color=colors_hex[0])
+plt.subplot(2, 3, 5)
+plt.plot(plotenvironment.data_log["depthN"]["basin_N3"], color=colors_hex[0],label = "Ground Truth")
+label1 = "Koopman Prediction (NRMSE = "+str(round(nrmse_each[4],3))+"%)"
+plt.plot(xkp_all[qoi:,4], '--', label = label1,color=colors_hex[1])
+plt.legend(loc="upper right", borderaxespad=0.1,prop={'size': 14})
+plt.xticks(fontsize=12)
+plt.yticks(fontsize=12)
+plt.xlabel('Simulation step',fontsize=14)
 plt.axhline(11.99, color="r")
-plt.axhline(5.92, color="k")
-plt.axhline(5.32, color="k")
+# plt.axhline(5.92, color="k")
+# plt.axhline(5.32, color="k")
 plt.axhline(5.28, color="r")
 plt.ylim([0,16])
-plt.ylabel("Depth")
+plt.ylabel("Depth",fontsize=14)
 plt.title("Basin North3")
-plt.show()
+# plt.show()
 
+plt.subplot(2, 3, 6)
+plt.plot(actions_north3, label='North3 Weir', linestyle='-', linewidth=3.0)
+plt.plot(actions_north2, label='North2 Weir', linestyle='--', linewidth=2.0)
+plt.plot(actions_north1, label='North1 Weir', linestyle='--', linewidth=2.0)
+plt.plot(actions_central, label='Central Weir', linestyle='-', linewidth=2.0)
+plt.plot(actions_south, label='South Orifice', linestyle='-.', linewidth=2.0)
+plt.ylim([-0.1,1.1])
+plt.legend(loc='upper right',prop={'size': 14})
+plt.xticks(fontsize=12)
+plt.yticks(fontsize=12)
+plt.xlabel('Simulation step',fontsize=14)
+plt.ylabel('Control asset setting',fontsize=14)
+plt.title('Koopman-based MPC')
+plt.show()
 
 # new plot on control =============================================================
 plt.rcParams['figure.figsize'] = [6, 6]
