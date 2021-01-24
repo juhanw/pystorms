@@ -5,7 +5,8 @@ import pystorms
 # from denseMPC import MPC
 # from MPC_rewrite import MPC
 # from MPC_soft import MPC
-from MPC_smooth import MPC
+# from MPC_smooth import MPC
+from MPC_cvx import MPC
 # from Koopman import Koopman 
 # from Koopman_rewrite import Koopman
 # from Koopman_multisteps import Koopman
@@ -72,7 +73,7 @@ while not done:
             t1 = t
 
             # get control input
-            z0 = KPmodel.lift(KPmodel.scale(x0[-1,:])) # x
+            z0 = KPmodel.lift(KPmodel.scale(x0[-1,:]),KPmodel.scale_lift(metric[-1,:])) # x
             ulast_scaled = KPmodel.scale(u[-1,:],state_scale=False)
             actions_mpc = KMPC.getMPC(z0,ulast_scaled,A,B,C)
             if actions_mpc is None:
@@ -84,30 +85,31 @@ while not done:
             xtrue = x0[-1,:].reshape(1,n)
             xkp = xtrue
             umpc = actions.reshape(1,m)
-            xkp = np.vstack((xkp,KPmodel.predict(xtrue,umpc) ))
+            xkp = np.vstack((xkp,KPmodel.predict(xtrue,umpc,metric[-1,:]) ))
 
     else:
         done = env_equalfilling.step(umpc[-1,:])
         state = env_equalfilling.state() # y
         flow = env_equalfilling.data_log["flow"]["8"]
+        metric = np.vstack((metric,flow[-1]))
         xtrue = np.vstack((xtrue,state ))
         # xtrue = np.vstack((xtrue,flow[-1] ))
 
         if t-t1 == tmulti:
             # update Koopman model
-            A,B,C = KPmodel.update(xtrue[-1,:],xtrue[-2,:],umpc[-1,:])
+            A,B,C = KPmodel.update(xtrue[-2,:],xtrue[-1,:],umpc[-1,:],metric[-2,:],metric[-1,:])
             t1 = t
-            xkp_new = KPmodel.predict(xtrue[-1,:],umpc[-1,:]).reshape(1,np.size(xkp,1))
+            xkp_new = KPmodel.predict(xtrue[-1,:],umpc[-1,:],metric[-1,:]).reshape(1,np.size(xkp,1))
             xkp[-1,:] = xtrue[-1,:]
             xkp = np.vstack((xkp, xkp_new))
             # get control input
-            z0 = KPmodel.lift(KPmodel.scale(xtrue[-1,:]))
+            z0 = KPmodel.lift(KPmodel.scale(xtrue[-1,:]),KPmodel.scale_lift(metric[-1,:]))
             ulast_scaled = KPmodel.scale(umpc[-1,:],state_scale=False)
         else:
-            xkp_new = KPmodel.predict(xkp[-1,:],umpc[-1,:]).reshape(1,np.size(xkp,1))
+            xkp_new = KPmodel.predict(xkp[-1,:],umpc[-1,:], metric[-1,:]).reshape(1,np.size(xkp,1))
             xkp = np.vstack((xkp, xkp_new))
             # get control input
-            z0 = KPmodel.lift(KPmodel.scale(xkp[-1,:]))
+            z0 = KPmodel.lift(KPmodel.scale(xkp[-1,:]),KPmodel.scale_lift(metric[-1,:]))
             ulast_scaled = KPmodel.scale(umpc[-1,:],state_scale=False)
         
         actions_mpc = KMPC.getMPC(z0,ulast_scaled,A,B,C)
@@ -158,26 +160,43 @@ nrmse_each = rmse_each/rmse_mean * 100
 print(nrmse_each,"%")
 
 plotenvironment = env_equalfilling
-plt.subplot(2, 1, 1)
+
+fig = plt.figure(figsize=(8,8))
+fig.add_subplot(2,1, 1)
+# plt.subplot(2, 2, [1,2])
 plt.axhline(0.5, color="r",label="Limit = 0.5")
 for i in range(n):
     label1 = "P"+str(i+1)+" Koopman NRMSE = "+str(round(nrmse_each[0],3))+"%"
     label2 = "P"+str(i+1)+" Ground True, Sampling T = "+ str(tmulti)+" steps"
     plt.plot(xtrue[:,i],label=label2)
     plt.plot(xkp_all[:,i],label=label1)
-plt.plot(env_equalfilling.data_log["flow"]["8"][n0:], label="Uncontrolled")
-plt.plot(xtrue[:,2],label="flow")
+# plt.plot(env_equalfilling.data_log["flow"]["8"][n0:], label="Uncontrolled")
+# plt.plot(metric[n0:],label="flow")
 plt.ylabel("Outflows")
-plt.legend()
+plt.legend(loc='upper right',prop={'size': 12})
 # new plot on control =============================================================
-plt.subplot(2, 1, 2)
-plt.rcParams['figure.figsize'] = [6, 6]
+# plt.subplot(2, 2, 3)
+fig.add_subplot(2,2,3)
+# plt.rcParams['figure.figsize'] = [6, 6]
 for i in range(m):
     labelu = "P"+str(i+1)
     plt.plot(umpc[:,i], label=labelu, linestyle='--', linewidth=2.0)
 plt.ylim([-0.1,1.1])
-plt.legend(loc='upper right')
+plt.legend(loc='upper right',prop={'size': 12})
 plt.ylabel('Control asset setting')
 plt.xlabel('Simulation step')
-plt.show()
+# plt.show()
 # '''
+fig.add_subplot(2,2,4)
+# plt.subplot(2, 2, 4)
+dth = np.linspace(0,2*np.pi,100)
+evalA = np.linalg.eigvals(A)
+plt.plot(evalA.real,evalA.imag,'o',label = 'Koopman Eigenvalues')
+plt.plot(np.cos(dth),np.sin(dth),'-',color='r',label='Unit Circle')
+plt.axis('equal')
+plt.legend(loc='upper right',prop={'size': 12})
+plt.ylabel('Imaginary Axis')
+plt.xlabel('Real Axis')
+plt.xlim([-1.1,1.1])
+plt.ylim([-1.1,1.1])
+plt.show()

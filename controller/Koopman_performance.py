@@ -136,12 +136,15 @@ class Koopman:
         Fcos = np.cos(Q)
         Fsin = np.sin(Q)
         F = np.hstack((Fcos, Fsin))/ np.sqrt(np.size(self.rff_z,1))
-        Psi = np.hstack((data,cost,F))
+        if np.size(cost) == 1:
+            Psi = np.hstack((np.append(data,cost).reshape(1,self.n+self.ncost),F))
+        else:
+            Psi = np.hstack((data,cost,F))
         Psi = Psi.T
 
         return Psi
 
-    def update(self, states_x, states_y, actions):
+    def update(self, states_x, states_y, actions, costs_x, costs_y):
         """
         recursive update AB, G 
         states is 1 x n
@@ -151,13 +154,15 @@ class Koopman:
         statesx_scaled = self.scale(states_x.reshape(1,self.n))
         statesy_scaled = self.scale(states_y.reshape(1,self.n))
         actions_scaled = self.scale(actions.reshape(1,self.m),state_scale=False)
+        costsx_scaled = self.scale_lift(costs_x)
+        costsy_scaled = self.scale_lift(costs_y)
         x_new = statesx_scaled.reshape(self.n,1)
         y_new = statesy_scaled.reshape(self.n,1)
         u_new = actions_scaled.reshape(self.m,1)
-        delta = np.vstack((self.lift(x_new.reshape(1,self.n)),u_new))
+        delta = np.vstack((self.lift(x_new.reshape(1,self.n),costsx_scaled),u_new))
         calc_easy = np.matmul(self.G,delta)
         beta = 1/(1 + np.matmul(delta.T,calc_easy))
-        innovation = self.lift(y_new.reshape(1,self.n)) - np.matmul(self.AB,delta)
+        innovation = self.lift(y_new.reshape(1,self.n),costsy_scaled) - np.matmul(self.AB,delta)
         self.AB += beta*np.matmul(innovation,calc_easy.T)
         self.A = self.AB[:,:self.nk]
         if np.max(self.A) > 1000:
@@ -181,7 +186,7 @@ class Koopman:
         self.Zeta = np.hstack((self.Zeta,delta))
         return self.A, self.B, self.C
 
-    def predict(self, states, actions):
+    def predict(self, states, actions, costs):
         """
         scale_down -> Koopman_predict -> scale_up
         """
@@ -189,7 +194,8 @@ class Koopman:
         actions = actions.reshape(1,self.m)
         states_scaled = self.scale(states)
         actions_scaled = self.scale(actions,state_scale=False)
-        delta_new = np.vstack([self.lift(states_scaled),actions_scaled.reshape(self.m,1)])
+        costs_scaled = self.scale_lift(costs)
+        delta_new = np.vstack([self.lift(states_scaled,costs_scaled),actions_scaled.reshape(self.m,1)])
         lift_predicted = np.matmul(self.AB,delta_new)
         predicts_scaled = np.matmul(self.C, lift_predicted)
         predicted = self.scale(predicts_scaled.reshape(1,self.n),scale_down=False)

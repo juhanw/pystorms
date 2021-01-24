@@ -67,19 +67,20 @@ class MPC:
         self.Su = np.hstack([np.zeros((np.size(self.Su,0),self.m)),self.Su])
         self.Su = np.vstack([np.zeros((self.nk,np.size(self.Su,1))), self.Su])
         self.Sz = np.vstack([np.eye(self.nk),self.Sz])
-
-        Qunit = np.eye(self.n)
-        for i in range(self.n):
-            Qunit[i,i] = 0
+        
+        Qunit = np.eye(self.nk)
+        for i in range(self.nk):
+            if i != self.n:
+                Qunit[i,i] = 0
         self.Q = np.kron(np.eye(self.nh),q*Qunit)
         self.Q = sci_la.block_diag(self.Q,qh*Qunit)
         self.R = np.kron(np.eye(self.nh+1),r*np.eye(self.m))
         # self.R = sci_la.block_diag(0*np.eye(self.m),self.R)
-        self.Cbig = np.kron(np.eye(self.nh+1),C)
-        CSu = np.matmul(self.Cbig,self.Su)
-        self.H = np.matmul(CSu.T,np.matmul(self.Q,CSu)) + self.R
-        calc_easy = np.matmul(self.Cbig,np.matmul(self.Sz,z0))
-        self.f = 2*np.matmul(calc_easy.T,np.matmul(self.Q,CSu)) #row vector
+        # self.Cbig = np.kron(np.eye(self.nh+1),C)
+        # CSu = np.matmul(self.Cbig,self.Su)
+        self.H = np.matmul(self.Su.T,np.matmul(self.Q,self.Su)) + self.R
+        calc_easy = np.matmul(self.Sz,z0)
+        self.f = 2*np.matmul(calc_easy.T,np.matmul(self.Q,self.Su)) #row vector
         # self.f[:,:self.m] = np.zeros((1,self.m))
 
         if self.Xub_soft is not None:
