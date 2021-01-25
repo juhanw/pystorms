@@ -26,21 +26,21 @@ u = []
 x0 = []
 metric = []
 settings = np.ones(2)
-# Xub_extreme = np.asarray([0.5, 0.5])
-# Xlb_extreme = np.asarray([0, 0])
 Xub_extreme = np.asarray([0.5, 0.5])
-Xlb_extreme = np.asarray([0,0])
+Xlb_extreme = np.asarray([0, 0])
 Uub = np.asarray([1,1])
 Ulb = np.zeros((1,2))
-Mub = sum(Xub_extreme)
-Mlb = sum(Xlb_extreme)
+# Mub = sum(Xub_extreme)
+# Mlb = sum(Xlb_extreme)
+Mub = 0.5
+Mlb = 0
 
 t = 0
 tmulti = 10
 n_basis = 4
 n = Xub_extreme.size
 m = Uub.size
-ncost = Mub.size
+ncost = 1
 nk = n + n_basis
 n0 = 150    #n0 > nk + m
 KPmodel = Koopman(Xub_extreme,Xlb_extreme,Uub,Ulb,Mub,Mlb,nk)
@@ -48,7 +48,8 @@ Xub_scaled = KPmodel.scale(Xub_extreme)
 Xlb_scaled = KPmodel.scale(Xlb_extreme)
 Uub_scaled = KPmodel.scale(Uub,state_scale=False)
 Ulb_scaled = KPmodel.scale(Ulb,state_scale=False)
-KMPC = MPC(Uub_scaled,Ulb_scaled, Xub_soft = Xub_scaled, Xlb_soft = Xlb_scaled)
+KMPC = MPC(Uub_scaled,Ulb_scaled,Mub=Mub,Mlb=Mlb,n=2)
+# KMPC = MPC(Uub_scaled,Ulb_scaled, Xub_soft = Xub_scaled, Xlb_soft = Xlb_scaled)
 
 while not done:
     if  t <= n0:
@@ -131,7 +132,7 @@ while not done:
 
     print(t, "is time")
     t = t + 1
-    if t > 12572:
+    if t > 12400:
         # break
         print(t, "is time")
     
@@ -151,10 +152,12 @@ plt.rcParams['figure.figsize'] = [20, 15]
 plt.rcParams['figure.dpi'] = 100 # 200 e.g. is really fine, but slower
 xkp_all = xkp[:-1,:]
 qoi = 0
-error = xtrue - xkp_all
+# error = xtrue - xkp_all
+# rmse_mean = np.mean(xtrue,0)
+error = env_equalfilling.data_log["flow"]["8"][n0:] - metric[n0:]
+rmse_mean = np.mean(env_equalfilling.data_log["flow"]["8"][n0:])
 rmse_square = error**2
 rmse_each = np.sqrt(np.sum(rmse_square,0)/np.size(rmse_square,0))
-rmse_mean = np.mean(xtrue,0)
 nrmse_each = rmse_each/rmse_mean * 100
 # NRMSE_predict = 100*np.sqrt(sum(np.linalg.norm(error[qoi:,:],axis=0)**2)) / np.sqrt(sum(np.linalg.norm(xtrue[qoi:,:],axis=0)**2))
 print(nrmse_each,"%")
@@ -163,23 +166,24 @@ plotenvironment = env_equalfilling
 
 fig = plt.figure(figsize=(8,8))
 fig.add_subplot(2,1, 1)
-# plt.subplot(2, 2, [1,2])
+# plt.ylabel("Depth")
+# for i in range(n):
+#     label1 = "P"+str(i+1)+" Koopman NRMSE = "+str(round(nrmse_each[0],3))+"%"
+#     label2 = "P"+str(i+1)+" Ground True, Sampling T = "+ str(tmulti)+" steps"
+#     plt.plot(xtrue[:,i],label=label2)
+#     plt.plot(xkp_all[:,i],label=label1)
+label3 = "Koopman NRMSE = "+str(round(nrmse_each[0],3))+"%"
+plt.plot(env_equalfilling.data_log["flow"]["8"][n0:], label="Ground True")
+plt.plot(metric[n0:],label=label3)
 plt.axhline(0.5, color="r",label="Limit = 0.5")
-for i in range(n):
-    label1 = "P"+str(i+1)+" Koopman NRMSE = "+str(round(nrmse_each[0],3))+"%"
-    label2 = "P"+str(i+1)+" Ground True, Sampling T = "+ str(tmulti)+" steps"
-    plt.plot(xtrue[:,i],label=label2)
-    plt.plot(xkp_all[:,i],label=label1)
-# plt.plot(env_equalfilling.data_log["flow"]["8"][n0:], label="Uncontrolled")
-# plt.plot(metric[n0:],label="flow")
-plt.ylabel("Outflows")
+plt.ylabel('Outflows')
 plt.legend(loc='upper right',prop={'size': 12})
 # new plot on control =============================================================
 # plt.subplot(2, 2, 3)
 fig.add_subplot(2,2,3)
 # plt.rcParams['figure.figsize'] = [6, 6]
 for i in range(m):
-    labelu = "P"+str(i+1)
+    labelu = "MPC - P"+str(i+1)
     plt.plot(umpc[:,i], label=labelu, linestyle='--', linewidth=2.0)
 plt.ylim([-0.1,1.1])
 plt.legend(loc='upper right',prop={'size': 12})

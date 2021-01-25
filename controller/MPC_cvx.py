@@ -6,13 +6,14 @@ class MPC:
     """
     docstring
     """
-    def __init__(self, Uub=None, Ulb=None, Xub_soft=None, Xlb_soft=None, Xub_hard=None, Xlb_hard=None, num_horizon=5, Uslop=0.005, Usmooth=0.01):
+    def __init__(self, Uub=None, Ulb=None, Xub_soft=None, Xlb_soft=None, Xub_hard=None, Xlb_hard=None, Mub=None, Mlb=None, n = 2, num_horizon=25, Uslop=0.005, Usmooth=0.01):
         """
         X, U bounds have already been scaled down
         """
         self.nh = num_horizon
         dt = 1/self.nh
         self.m = np.size(Uub)
+        
         if Uub is not None:
             self.Uub = Uub.reshape(self.m,1)
         else:
@@ -33,6 +34,8 @@ class MPC:
             self.Xub_soft = Xub_soft.reshape(self.n,1)
             self.nslack = self.n*(self.nh+1)
         else:
+            self.n = n
+            self.nslack = 0
             self.Xub_soft = None
         if Xlb_soft is not None:
             self.Xlb_soft = Xlb_soft.reshape(self.n,1)
@@ -49,7 +52,18 @@ class MPC:
         else:
             self.Xlb_hard = None
 
-    def set_cost(self, z0, ulast, A, B, C, q=5, qh=5, r=0.1):
+        if Mub is not None:
+            self.nmetric = np.size(Mub)
+            self.nslack += self.nmetric*(self.nh+1)
+            self.Mub = Mub
+        else:
+            self.Mub = None
+        if Mlb is not None:
+            self.Mlb = Mlb
+        else:
+            self.Mlb = None
+
+    def set_cost(self, z0, ulast, A, B, C, q=1, qh=1, r=0.01):
         """
         Cost = U*H*U' + f'*U
         U = [ulast, u0, u1, ..., uh-1] -- h+1
@@ -68,24 +82,27 @@ class MPC:
         self.Su = np.vstack([np.zeros((self.nk,np.size(self.Su,1))), self.Su])
         self.Sz = np.vstack([np.eye(self.nk),self.Sz])
         
-        Qunit = np.eye(self.nk)
-        for i in range(self.nk):
-            if i != self.n:
-                Qunit[i,i] = 0
+        # Qunit = np.eye(self.nk)
+        # for i in range(self.nk):
+        #     if i != self.n:
+        #         Qunit[i,i] = 0
+        Qunit = np.eye(self.n)
         self.Q = np.kron(np.eye(self.nh),q*Qunit)
         self.Q = sci_la.block_diag(self.Q,qh*Qunit)
         self.R = np.kron(np.eye(self.nh+1),r*np.eye(self.m))
-        # self.R = sci_la.block_diag(0*np.eye(self.m),self.R)
-        # self.Cbig = np.kron(np.eye(self.nh+1),C)
-        # CSu = np.matmul(self.Cbig,self.Su)
-        self.H = np.matmul(self.Su.T,np.matmul(self.Q,self.Su)) + self.R
-        calc_easy = np.matmul(self.Sz,z0)
-        self.f = 2*np.matmul(calc_easy.T,np.matmul(self.Q,self.Su)) #row vector
-        # self.f[:,:self.m] = np.zeros((1,self.m))
+        self.Cbig = np.kron(np.eye(self.nh+1),C)
+        CSu = np.matmul(self.Cbig,self.Su)
+        self.H = np.matmul(CSu.T,np.matmul(self.Q,CSu)) + self.R
+        calc_easy = np.matmul(self.Cbig,np.matmul(self.Sz,z0))
+        self.f = 2*np.matmul(calc_easy.T,np.matmul(self.Q,CSu)) #row vector
+        # self.H = np.matmul(self.Su.T,np.matmul(self.Q,self.Su)) + self.R
+        # calc_easy = np.matmul(self.Sz,z0)
+        # self.f = 2*np.matmul(calc_easy.T,np.matmul(self.Q,self.Su)) #row vector
 
-        if self.Xub_soft is not None:
+        if (self.Xub_soft is not None) or (self.Mub is not None):
             self.H = sci_la.block_diag(self.H,0*np.eye(self.nslack))
             self.f = np.hstack([self.f, 1e3*np.ones((1, self.nslack))])
+
 
     def set_constraints(self, z0, ulast, A, B, C):
         """
@@ -96,7 +113,7 @@ class MPC:
         # input constraints
         Au_unit = np.vstack([np.eye(self.m),-np.eye(self.m)])
         Au = np.kron(np.eye(self.nh+1),Au_unit)
-        bu_unit = np.vstack([self.Uub,-self.Ulb])
+        bu_unit = np.vstack([self.Uub,-1*self.Ulb])
         bu = np.kron(np.ones((self.nh+1,1)),bu_unit)
         
         # slop constraints: u1 - u0 < uslop
@@ -119,7 +136,7 @@ class MPC:
         Au_smooth = np.vstack([Au_smooth_block,-Au_smooth_block])
         bu_smooth = np.kron(np.ones((np.size(Au_smooth,0),1)),self.Usmooth)
 
-            # memory constraints: u0 = u0
+        # memory constraints: u0 = u0
         Au_mem = np.kron(np.zeros((2,self.nh+1)),0*np.eye(self.m))
         Au_mem[:,:self.m] = Au_unit
         bu_mem = np.vstack([ulast,-1*ulast])
@@ -127,7 +144,7 @@ class MPC:
         Au = np.vstack([Au, Au_slop, Au_smooth, Au_mem])        
         bu = np.vstack([bu, bu_slop, bu_smooth, bu_mem])
 
-        if self.Xub_soft is not None:
+        if (self.Xub_soft is not None) or (self.Mub is not None):
             self.L = np.hstack([Au, np.zeros((np.size(Au,0),self.nslack))])
         else:
             self.L = Au
@@ -157,6 +174,32 @@ class MPC:
             bieq3 = np.zeros((self.nslack,1))
             self.L = np.vstack([Aieq1, Aieq2, Aieq3])
             self.w = np.vstack([bieq1, bieq2, bieq3])
+        
+        if self.Mub is not None:
+            # use soft constraints
+            P_unit = np.zeros((self.nmetric,self.nk))
+            P_unit[:,self.n] = 1
+            P_blk = np.vstack([P_unit,-P_unit])
+            P = np.kron(np.eye(self.nh+1),P_blk)
+            Az_U = np.matmul(P,self.Su)
+            Az_z0 = np.matmul(P,self.Sz) 
+            Aieq1 = self.L
+            Aieq2 = np.hstack([Az_U, np.vstack([-np.eye(self.nslack),-np.eye(self.nslack)])])
+            Aieq3 = np.hstack([np.zeros((self.nslack,self.m*(self.nh+1) )), -np.eye(self.nslack) ])
+            bieq1 = self.w
+            bsoft_unit = np.vstack([self.Mub,-1*self.Mlb])
+            bsoft = np.kron(np.ones((self.nh+1,1)),bsoft_unit)
+            bieq2 = bsoft - np.matmul(Az_z0,z0)
+            bieq3 = np.zeros((self.nslack,1))
+            self.L = np.vstack([Aieq1, Aieq2, Aieq3])
+            self.w = np.vstack([bieq1, bieq2, bieq3])
+
+            # bz_unit = np.vstack([self.Mub,-1*self.Mlb])
+            # bz = np.kron(np.ones((self.nh+1,1)),bz_unit)
+            # self.L = np.vstack([self.L,Az_U])
+            # self.w = np.vstack([self.w,bz-np.matmul(Az_z0,z0)])
+
+
 
     def getMPC(self, z0, ulast, A, B, C):
         """
