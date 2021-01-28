@@ -6,7 +6,7 @@ class MPC:
     """
     docstring
     """
-    def __init__(self, Uub=None, Ulb=None, Xub_soft=None, Xlb_soft=None, Xub_hard=None, Xlb_hard=None, Mub=None, Mlb=None, n = 2, num_horizon=25, Uslop=0.005, Usmooth=0.01):
+    def __init__(self, Uub=None, Ulb=None, Xub_soft=None, Xlb_soft=None, Xub_hard=None, Xlb_hard=None, Mub=None, Mlb=None, n = 2, num_horizon=5, Uslop=0.005, Usmooth=0.01):
         """
         X, U bounds have already been scaled down
         """
@@ -55,15 +55,21 @@ class MPC:
         if Mub is not None:
             self.nmetric = np.size(Mub)
             self.nslack += self.nmetric*(self.nh+1)
-            self.Mub = Mub
+            if np.size(Mub) > 1:
+                self.Mub = Mub.reshape(self.nmetric,1)
+            else:
+                self.Mub = Mub
         else:
             self.Mub = None
         if Mlb is not None:
-            self.Mlb = Mlb
+            if np.size(Mlb) > 1:
+                self.Mlb = Mlb.reshape(self.nmetric,1)
+            else:
+                self.Mlb = Mlb
         else:
             self.Mlb = None
 
-    def set_cost(self, z0, ulast, A, B, C, q=1, qh=1, r=0.01):
+    def set_cost(self, z0, ulast, A, B, C, q=1, qh=10, r=0.01):
         """
         Cost = U*H*U' + f'*U
         U = [ulast, u0, u1, ..., uh-1] -- h+1
@@ -101,7 +107,7 @@ class MPC:
 
         if (self.Xub_soft is not None) or (self.Mub is not None):
             self.H = sci_la.block_diag(self.H,0*np.eye(self.nslack))
-            self.f = np.hstack([self.f, 1e3*np.ones((1, self.nslack))])
+            self.f = np.hstack([self.f, 1e5*np.ones((1, self.nslack))])
 
 
     def set_constraints(self, z0, ulast, A, B, C):
@@ -178,7 +184,7 @@ class MPC:
         if self.Mub is not None:
             # use soft constraints
             P_unit = np.zeros((self.nmetric,self.nk))
-            P_unit[:,self.n] = 1
+            P_unit[:,self.n:self.n+self.nmetric] = 1
             P_blk = np.vstack([P_unit,-P_unit])
             P = np.kron(np.eye(self.nh+1),P_blk)
             Az_U = np.matmul(P,self.Su)
