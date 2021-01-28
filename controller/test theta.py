@@ -48,7 +48,9 @@ Xub_scaled = KPmodel.scale(Xub_extreme)
 Xlb_scaled = KPmodel.scale(Xlb_extreme)
 Uub_scaled = KPmodel.scale(Uub,state_scale=False)
 Ulb_scaled = KPmodel.scale(Ulb,state_scale=False)
-KMPC = MPC(Uub_scaled,Ulb_scaled,Mub=Mub,Mlb=Mlb,n=2)
+Mub_scaled = KPmodel.scale_lift(Mub)
+Mlb_scaled = KPmodel.scale_lift(Mlb)
+KMPC = MPC(Uub_scaled,Ulb_scaled,Mub=Mub_scaled,Mlb=Mlb_scaled,n=n)
 # KMPC = MPC(Uub_scaled,Ulb_scaled, Xub_soft = Xub_scaled, Xlb_soft = Xlb_scaled)
 
 while not done:

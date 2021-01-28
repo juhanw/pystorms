@@ -47,7 +47,9 @@ Xub_scaled = KPmodel.scale(Xub_extreme)
 Xlb_scaled = KPmodel.scale(Xlb_extreme)
 Uub_scaled = KPmodel.scale(Uub,state_scale=False)
 Ulb_scaled = KPmodel.scale(Ulb,state_scale=False)
-KMPC = MPC(Uub_scaled,Ulb_scaled,Mub=Mub,Mlb=Mlb,n=n)
+Mub_scaled = KPmodel.scale_lift(Mub)
+Mlb_scaled = KPmodel.scale_lift(Mlb)
+KMPC = MPC(Uub_scaled,Ulb_scaled,Mub=Mub_scaled,Mlb=Mlb_scaled,n=n)
 # KMPC = MPC(Uub_scaled,Ulb_scaled, Xub_soft = Xub_scaled, Xlb_soft = Xlb_scaled)
 
 while not done:
@@ -155,9 +157,7 @@ rmse_each = np.sqrt(np.sum(rmse_square,0)/np.size(rmse_square,0))
 nrmse_each = rmse_each/rmse_mean * 100
 # NRMSE_predict = 100*np.sqrt(sum(np.linalg.norm(error[qoi:,:],axis=0)**2)) / np.sqrt(sum(np.linalg.norm(xtrue[qoi:,:],axis=0)**2))
 print(nrmse_each,"%")
-
-plotenvironment = env_equalfilling
-
+# plot============================================================================================
 fig = plt.figure(figsize=(8,8))
 fig.add_subplot(2,1, 1)
 plt.ylabel("Depth")
@@ -177,7 +177,6 @@ plt.axhline(Mub.mean(), color="r",label="Limit = "+str(Mub.mean()))
 plt.ylabel('Outflows')
 plt.legend(loc='upper center',mode='expand', ncol=6,prop={'size': 12})
 plt.show()
-
 # new plot on control =============================================================
 fig = plt.figure(figsize=(8,8))
 # plt.rcParams['figure.figsize'] = [6, 6]
