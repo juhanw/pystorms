@@ -70,9 +70,6 @@ class Koopman:
         self.CY = Weights*CY_scaled.T
         self.PsiX = self.lift(self.X.T,self.CX.T)
         self.PsiY = self.lift(self.Y.T,self.CY.T)
-        # self.X = self.X.reshape(self.n,Nt)
-        # self.Y = self.Y.reshape(self.n,Nt)
-        # self.U = self.U.reshape(self.m,Nt)
         self.Zeta = np.vstack((self.PsiX,self.U))
         self.non_singular = 0.1
         self.Q = np.matmul(self.PsiY,self.Zeta.T)
@@ -92,6 +89,10 @@ class Koopman:
         return self.A, self.B, self.C
 
     def scale_lift(self,data, scale_down=True,metric_scale=True):
+        '''
+        This scaling would only be used when there have non-convex tracking or constraints,
+        where those metrics are appended into the lifted states and will be tackled in MPC. 
+        '''
         if metric_scale:
             if scale_down:
                 scaled = (data - self.metric_center)/self.metric_range
@@ -130,7 +131,6 @@ class Koopman:
         lift the state space to a Koopman subspace
         lifted = [states; (actions?); lift(states)]
         RFF sampling rff_z ~ N(0, sigma^2*I_n)
-        # RBF
         """
         Q = np.matmul(data,self.rff_z)
         Fcos = np.cos(Q)
