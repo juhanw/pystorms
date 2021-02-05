@@ -36,7 +36,7 @@ Uub = np.ones((1,5))
 Ulb = np.zeros((1,5))
 
 t = 0
-tmulti = 100
+tmulti = 10
 n_basis = 6
 n = Xub_extreme.size
 m = Uub.size
@@ -142,7 +142,7 @@ while not done:
 
     print(t, "is time")
     t = t + 1
-    if t > 4000:
+    if t > 45957:
         # break
         print(t, "is time")
     

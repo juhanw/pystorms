@@ -134,7 +134,7 @@ while not done:
 
     print(t, "is time")
     t = t + 1
-    if t > 12400:
+    if t > 15000:
         # break
         print(t, "is time")
     
@@ -173,8 +173,8 @@ for i in range(n):
     label2 = str(i+1)+" GT"
     plt.plot(xtrue[:,i],'-',label=label2, color=colors_hex[i])
     plt.plot(xkp_all[:,i],'--',label=label1, color=colors_hex[i])
-title = "Sampling T = " + str(tmulti)+ " steps"
-plt.title(title)
+# title = "Sampling T = " + str(tmulti)+ " steps"
+# plt.title(title)
 plt.legend(loc='upper center',ncol=9,prop={'size': 8})
 
 fig.add_subplot(2,1, 2)
@@ -190,7 +190,7 @@ for i in range(m):
 plt.legend(loc='lower right',prop={'size': 12})
 plt.ylabel('Control asset setting')
 plt.xlabel('Simulation step')
-plt.title('MPC')
+# plt.title('MPC')
 plt.show()
 # '''
 fig.add_subplot(2,2,4)

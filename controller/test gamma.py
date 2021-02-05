@@ -169,6 +169,7 @@ for i in range(n):
 title = "Sampling T = " + str(tmulti)+ " steps"
 plt.title(title)
 plt.legend(loc='upper center',mode='expand', ncol=4,prop={'size': 12})
+plt.ylim([-0.3,20])
 
 fig.add_subplot(2,1, 2)
 for i in range(ncost):
@@ -176,6 +177,7 @@ for i in range(ncost):
 plt.axhline(Mub.mean(), color="r",label="Limit = "+str(Mub.mean()))
 plt.ylabel('Outflows')
 plt.legend(loc='upper center',mode='expand', ncol=6,prop={'size': 12})
+plt.ylim([-0.3,16])
 plt.show()
 # new plot on control =============================================================
 fig = plt.figure(figsize=(8,8))
@@ -183,7 +185,7 @@ fig = plt.figure(figsize=(8,8))
 for i in range(m):
     labelu = "Basin"+str(i+1)
     plt.plot(umpc[:,i], label=labelu, linestyle='--', linewidth=2.0)
-plt.ylim([-0.1,1.1])
+plt.ylim([-0.3,1.3])
 plt.legend(loc='upper center',mode='expand', ncol=6,prop={'size': 12})
 plt.ylabel('Control asset setting')
 plt.xlabel('Simulation step')

@@ -81,7 +81,7 @@ class MPC:
 
         if self.Xub_soft is not None:
             self.H = sci_la.block_diag(self.H,0*np.eye(self.nslack))
-            self.f = np.hstack([self.f, 1e3*np.ones((1, self.nslack))])
+            self.f = np.hstack([self.f, 1e6*np.ones((1, self.nslack))])
 
     def set_constraints(self, z0, ulast, A, B, C):
         """
@@ -144,7 +144,10 @@ class MPC:
         if self.Xub_soft is not None:
             # [U; slack inequalities; positive slack]
             Aieq1 = self.L
-            Aieq2 = np.hstack([Az_U, np.vstack([-np.eye(self.nslack),-np.eye(self.nslack)])])
+            n_s = int(self.nslack/(self.nh+1))
+            S_unit = np.vstack([-np.eye(n_s),-np.eye(n_s)])
+            S = np.kron(np.eye(self.nh+1),S_unit)
+            Aieq2 = np.hstack([Az_U, S])
             Aieq3 = np.hstack([np.zeros((self.nslack,self.m*(self.nh+1) )), -np.eye(self.nslack) ])
             bieq1 = self.w
             bsoft_unit = np.vstack([self.Xub_soft,-1*self.Xlb_soft])

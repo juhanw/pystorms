@@ -92,10 +92,15 @@ class MPC:
         # for i in range(self.nk):
         #     if i != self.n:
         #         Qunit[i,i] = 0
-        Qunit = np.eye(self.n)
+        Qunit = np.eye(self.nmetric)
         self.Q = np.kron(np.eye(self.nh),q*Qunit)
         self.Q = sci_la.block_diag(self.Q,qh*Qunit)
         self.R = np.kron(np.eye(self.nh+1),r*np.eye(self.m))
+        C = np.zeros((self.nmetric,self.nk))
+        if self.nmetric ==1:
+            C[:,self.n:self.n+self.nmetric] = 1
+        else:
+            C[:,self.n:self.n+self.nmetric] = np.eye(self.nmetric)
         self.Cbig = np.kron(np.eye(self.nh+1),C)
         CSu = np.matmul(self.Cbig,self.Su)
         self.H = np.matmul(CSu.T,np.matmul(self.Q,CSu)) + self.R
@@ -107,7 +112,7 @@ class MPC:
 
         if (self.Xub_soft is not None) or (self.Mub is not None):
             self.H = sci_la.block_diag(self.H,0*np.eye(self.nslack))
-            self.f = np.hstack([self.f, 1e5*np.ones((1, self.nslack))])
+            self.f = np.hstack([self.f, 1e8*np.ones((1, self.nslack))])
 
 
     def set_constraints(self, z0, ulast, A, B, C):
@@ -171,7 +176,10 @@ class MPC:
         if self.Xub_soft is not None:
             # [U; slack inequalities; positive slack]
             Aieq1 = self.L
-            Aieq2 = np.hstack([Az_U, np.vstack([-np.eye(self.nslack),-np.eye(self.nslack)])])
+            n_s = int(self.nslack/(self.nh+1))
+            S_unit = np.vstack([-np.eye(n_s),-np.eye(n_s)])
+            S = np.kron(np.eye(self.nh+1),S_unit)
+            Aieq2 = np.hstack([Az_U, S])
             Aieq3 = np.hstack([np.zeros((self.nslack,self.m*(self.nh+1) )), -np.eye(self.nslack) ])
             bieq1 = self.w
             bsoft_unit = np.vstack([self.Xub_soft,-1*self.Xlb_soft])
@@ -184,13 +192,19 @@ class MPC:
         if self.Mub is not None:
             # use soft constraints
             P_unit = np.zeros((self.nmetric,self.nk))
-            P_unit[:,self.n:self.n+self.nmetric] = 1
+            if self.nmetric ==1:
+                P_unit[:,self.n:self.n+self.nmetric] = 1
+            else:
+                P_unit[:,self.n:self.n+self.nmetric] = np.eye(self.nmetric)
             P_blk = np.vstack([P_unit,-P_unit])
             P = np.kron(np.eye(self.nh+1),P_blk)
             Az_U = np.matmul(P,self.Su)
             Az_z0 = np.matmul(P,self.Sz) 
             Aieq1 = self.L
-            Aieq2 = np.hstack([Az_U, np.vstack([-np.eye(self.nslack),-np.eye(self.nslack)])])
+            n_s = int(self.nslack/(self.nh+1))
+            S_unit = np.vstack([-np.eye(n_s),-np.eye(n_s)])
+            S = np.kron(np.eye(self.nh+1),S_unit)
+            Aieq2 = np.hstack([Az_U, S])
             Aieq3 = np.hstack([np.zeros((self.nslack,self.m*(self.nh+1) )), -np.eye(self.nslack) ])
             bieq1 = self.w
             bsoft_unit = np.vstack([self.Mub,-1*self.Mlb])
