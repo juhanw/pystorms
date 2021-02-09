@@ -49,6 +49,8 @@ class Koopman:
         # set rff:
         rff_sigma_gaussian = np.std(states)
         num_features = int((self.nk - self.n- self.ncost)/2)
+        # np.random.get_state()[1][0]
+        np.random.seed(878528420)
         self.rff_z = np.random.randn(self.n, num_features)/rff_sigma_gaussian
         print('Set up Random Fourier Features successfully!')
 
@@ -96,8 +98,10 @@ class Koopman:
         if metric_scale:
             if scale_down:
                 scaled = (data - self.metric_center)/self.metric_range
+                # scaled = 1.1* 1/(1+np.exp(-data))
             else:
-                data*self.metric_range + self.metric_center
+                scaled = data*self.metric_range + self.metric_center
+                # scaled = -np.log(1/data-1)
         else:
             scaled = data
         return scaled
@@ -113,13 +117,17 @@ class Koopman:
         if state_scale:
             if scale_down:
                 scaled = (data - self.state_center) / self.state_range
+                # scaled = 1.1* 1/(1+np.exp(-data))
             else:
                 scaled = data*self.state_range + self.state_center
+                # scaled = -np.log(1/data-1)
         else:
             if scale_down:
                 scaled = (data - self.action_center) / self.action_range
+                # scaled = 1.1* 1/(1+np.exp(-data))
             else:
                 scaled = data*self.action_range + self.action_center
+                # scaled = -np.log(1/data-1)
         
         return scaled
 
@@ -132,6 +140,9 @@ class Koopman:
         lifted = [states; (actions?); lift(states)]
         RFF sampling rff_z ~ N(0, sigma^2*I_n)
         """
+        if np.size(cost) == self.ncost:
+            cost = cost.reshape(1, np.size(cost))
+            data = data.reshape(1, np.size(data))
         Q = np.matmul(data,self.rff_z)
         Fcos = np.cos(Q)
         Fsin = np.sin(Q)
