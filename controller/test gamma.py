@@ -6,7 +6,8 @@ import pystorms
 # from MPC_rewrite import MPC
 # from MPC_soft import MPC
 # from MPC_smooth import MPC
-from MPC_cvx import MPC
+# from MPC_cvx import MPC
+from MPC_flooding import MPC
 # from Koopman import Koopman 
 # from Koopman_rewrite import Koopman
 # from Koopman_multisteps import Koopman
@@ -22,6 +23,7 @@ from matplotlib import pyplot as plt
 env_equalfilling = pystorms.scenarios.gamma() # states = [BC, BS, N1, N2, N3, N4]
 done = False
 
+nm0 = 11
 u = []
 x0 = []
 settings = np.ones(11)
@@ -31,17 +33,20 @@ Uub = np.ones((1,11))
 Ulb = np.zeros((1,11))
 # Mub = sum(Xub_extreme)
 # Mlb = sum(Xlb_extreme)
-Mub = 12.5*np.ones((1,11))
-Mlb = 0*np.ones((1,11))
+# Mub = 11*np.ones((1,11))
+# Mlb = 0*np.ones((1,11))
+Mub = np.hstack([11*np.ones((1,11)),5*np.ones((1,nm0))])
+Mlb = np.hstack([0*np.ones((1,11)),-1*np.ones((1,nm0))])
 
 t = 0
-tmulti = 10
+counter = 0
+tmulti = 30
 n_basis = 4
 n = Xub_extreme.size
 m = Uub.size
 ncost = 11
 nk = n + n_basis
-n0 = 150    #n0 > nk + m
+n0 = 250    #n0 > nk + m
 KPmodel = Koopman(Xub_extreme,Xlb_extreme,Uub,Ulb,Mub,Mlb,nk)
 Xub_scaled = KPmodel.scale(Xub_extreme)
 Xlb_scaled = KPmodel.scale(Xlb_extreme)
@@ -49,7 +54,7 @@ Uub_scaled = KPmodel.scale(Uub,state_scale=False)
 Ulb_scaled = KPmodel.scale(Ulb,state_scale=False)
 Mub_scaled = KPmodel.scale_lift(Mub)
 Mlb_scaled = KPmodel.scale_lift(Mlb)
-KMPC = MPC(Uub_scaled,Ulb_scaled,Mub=Mub_scaled,Mlb=Mlb_scaled,n=n)
+KMPC = MPC(Uub_scaled,Ulb_scaled,Mub=Mub_scaled,Mlb=Mlb_scaled,n=n,nm0=nm0)
 # KMPC = MPC(Uub_scaled,Ulb_scaled, Xub_soft = Xub_scaled, Xlb_soft = Xlb_scaled)
 
 while not done:
@@ -63,17 +68,21 @@ while not done:
 
         if t == n0:
             metric = np.asarray(list(env_equalfilling.data_log["flow"].values())).T
+            zeroG = np.asarray(list(env_equalfilling.data_log["flooding"].values())).T
+            NL = np.hstack([metric,zeroG])
             u = np.asarray(u)
             x0 = np.asarray(x0)
             u = u.reshape(n0+1,m)
             x0 = x0.reshape(n0+1,n)
             
             # initialize Koopman model:
-            A,B,C = KPmodel.initialization(x0,u,metric)
+            # A,B,C = KPmodel.initialization(x0,u,metric)
+            A,B,C = KPmodel.initialization(x0,u,NL)
             t1 = t
 
             # get control input
-            z0 = KPmodel.lift(KPmodel.scale(x0[-1,:]),KPmodel.scale_lift(metric[-1,:])) # x
+            # z0 = KPmodel.lift(KPmodel.scale(x0[-1,:]),KPmodel.scale_lift(metric[-1,:])) # x
+            z0 = KPmodel.lift(KPmodel.scale(x0[-1,:]),KPmodel.scale_lift(NL[-1,:])) # x
             ulast_scaled = KPmodel.scale(u[-1,:],state_scale=False)
             actions_mpc = KMPC.getMPC(z0,ulast_scaled,A,B,C)
             if actions_mpc is None:
@@ -85,30 +94,39 @@ while not done:
             xtrue = x0[-1,:].reshape(1,n)
             xkp = xtrue
             umpc = actions.reshape(1,m)
-            xkp = np.vstack((xkp,KPmodel.predict(xtrue,umpc,metric[-1,:]) ))
+            # xkp = np.vstack((xkp,KPmodel.predict(xtrue,umpc,metric[-1,:]) ))
+            xkp = np.vstack((xkp,KPmodel.predict(xtrue,umpc,NL[-1,:]) ))
 
     else:
         done = env_equalfilling.step(umpc[-1,:])
         state = env_equalfilling.state() # y
         metric = np.asarray(list(env_equalfilling.data_log["flow"].values())).T
+        zeroG = np.asarray(list(env_equalfilling.data_log["flooding"].values())).T
+        NL = np.hstack([metric,zeroG])
         xtrue = np.vstack((xtrue,state ))
         # xtrue = np.vstack((xtrue,flow[-1] ))
 
         if t-t1 == tmulti:
             # update Koopman model
-            A,B,C = KPmodel.update(xtrue[-2,:],xtrue[-1,:],umpc[-1,:],metric[-2,:],metric[-1,:])
+            # A,B,C = KPmodel.update(xtrue[-2,:],xtrue[-1,:],umpc[-1,:],metric[-2,:],metric[-1,:])
+            A,B,C = KPmodel.update(xtrue[-2,:],xtrue[-1,:],umpc[-1,:],NL[-2,:],NL[-1,:])
+            counter += 1
             t1 = t
-            xkp_new = KPmodel.predict(xtrue[-1,:],umpc[-1,:],metric[-1,:]).reshape(1,np.size(xkp,1))
+            # xkp_new = KPmodel.predict(xtrue[-1,:],umpc[-1,:],metric[-1,:]).reshape(1,np.size(xkp,1))
+            xkp_new = KPmodel.predict(xtrue[-1,:],umpc[-1,:],NL[-1,:]).reshape(1,np.size(xkp,1))
             xkp[-1,:] = xtrue[-1,:]
             xkp = np.vstack((xkp, xkp_new))
             # get control input
-            z0 = KPmodel.lift(KPmodel.scale(xtrue[-1,:]),KPmodel.scale_lift(metric[-1,:]))
+            # z0 = KPmodel.lift(KPmodel.scale(xtrue[-1,:]),KPmodel.scale_lift(metric[-1,:]))
+            z0 = KPmodel.lift(KPmodel.scale(xtrue[-1,:]),KPmodel.scale_lift(NL[-1,:]))
             ulast_scaled = KPmodel.scale(umpc[-1,:],state_scale=False)
         else:
-            xkp_new = KPmodel.predict(xkp[-1,:],umpc[-1,:], metric[-1,:]).reshape(1,np.size(xkp,1))
+            # xkp_new = KPmodel.predict(xkp[-1,:],umpc[-1,:], metric[-1,:]).reshape(1,np.size(xkp,1))
+            xkp_new = KPmodel.predict(xkp[-1,:],umpc[-1,:], NL[-1,:]).reshape(1,np.size(xkp,1))
             xkp = np.vstack((xkp, xkp_new))
             # get control input
-            z0 = KPmodel.lift(KPmodel.scale(xkp[-1,:]),KPmodel.scale_lift(metric[-1,:]))
+            # z0 = KPmodel.lift(KPmodel.scale(xkp[-1,:]),KPmodel.scale_lift(metric[-1,:]))
+            z0 = KPmodel.lift(KPmodel.scale(xkp[-1,:]),KPmodel.scale_lift(NL[-1,:]))
             ulast_scaled = KPmodel.scale(umpc[-1,:],state_scale=False)
         
         actions_mpc = KMPC.getMPC(z0,ulast_scaled,A,B,C)
@@ -118,11 +136,11 @@ while not done:
         actions = actions.T
         umpc = np.vstack((umpc,actions.reshape(1,np.size(umpc,1)) ))
         xkp_all = xkp[:-1,:]
-        qoi = t-50
+        qoi = t-n0-5*tmulti   # sequential 5 updates nrmse < 5% 
         error = xtrue - xkp_all
-        rmse_square = error**2
+        rmse_square = error[qoi:,:]**2
         rmse_each = np.sqrt(np.sum(rmse_square,0)/np.size(rmse_square,0))
-        rmse_mean = np.mean(xtrue,0)
+        rmse_mean = np.mean(xtrue[qoi:,:],0)
         nrmse_each = rmse_each/rmse_mean * 100
         # NRMSE_predict = 100*np.sqrt(sum(np.linalg.norm(error[qoi:,:],axis=0)**2)) / np.sqrt(sum(np.linalg.norm(xtrue[qoi:,:],axis=0)**2))
         if nrmse_each.any() < 0.5 and qoi > 0:
@@ -130,9 +148,11 @@ while not done:
 
     print(t, "is time")
     t = t + 1
-    if t > 12400:
+    if t > 420:
         # break
-        print(t, "is time")
+        if nrmse_each.max() < 10:
+            print(t, "is time") # 10--1002
+            print("updates", counter) # 10--1002
     
 equalfilling_perf = sum(env_equalfilling.data_log["performance_measure"])
 
@@ -149,10 +169,10 @@ colors_hex = colorpalette.as_hex()
 plt.rcParams['figure.figsize'] = [20, 15]
 plt.rcParams['figure.dpi'] = 100 # 200 e.g. is really fine, but slower
 xkp_all = xkp[:-1,:]
-qoi = 0
+qoi = t-n0-5*tmulti
 error = xtrue - xkp_all
-rmse_mean = np.mean(xtrue,0)
-rmse_square = error**2
+rmse_mean = np.mean(xtrue[qoi:,:],0)
+rmse_square = error[qoi:,:]**2
 rmse_each = np.sqrt(np.sum(rmse_square,0)/np.size(rmse_square,0))
 nrmse_each = rmse_each/rmse_mean * 100
 # NRMSE_predict = 100*np.sqrt(sum(np.linalg.norm(error[qoi:,:],axis=0)**2)) / np.sqrt(sum(np.linalg.norm(xtrue[qoi:,:],axis=0)**2))
@@ -167,17 +187,27 @@ for i in range(n):
     plt.plot(xtrue[:,i],'-',label=label2, color=colors_hex[i])
     plt.plot(xkp_all[:,i],'--',label=label1, color=colors_hex[i])
 title = "Sampling T = " + str(tmulti)+ " steps"
-plt.title(title)
+# plt.title(title)
 plt.legend(loc='upper center',mode='expand', ncol=4,prop={'size': 12})
 plt.ylim([-0.3,20])
 
 fig.add_subplot(2,1, 2)
 for i in range(ncost):
     plt.plot(metric[:,i], label="Basin"+str(i+1),color=colors_hex[i])
-plt.axhline(Mub.mean(), color="r",label="Limit = "+str(Mub.mean()))
+plt.axhline(Mub.max(), color="r",label="Limit = "+str(Mub.max()))
 plt.ylabel('Outflows')
 plt.legend(loc='upper center',mode='expand', ncol=6,prop={'size': 12})
 plt.ylim([-0.3,16])
+plt.show()
+
+fig.add_subplot(2,1, 2)
+flooding = np.asarray(list(env_equalfilling.data_log["flooding"].values())).T
+for i in range(ncost):
+    plt.plot(flooding[:,i], label="Basin"+str(i+1),color=colors_hex[i])
+plt.axhline(Mub.min(), color="r",label="Limit = "+str(Mub.min()))
+plt.ylabel('Floodings')
+plt.legend(loc='upper center',mode='expand', ncol=6,prop={'size': 12})
+# plt.ylim([-0.3,50])
 plt.show()
 # new plot on control =============================================================
 fig = plt.figure(figsize=(8,8))
@@ -189,7 +219,7 @@ plt.ylim([-0.3,1.3])
 plt.legend(loc='upper center',mode='expand', ncol=6,prop={'size': 12})
 plt.ylabel('Control asset setting')
 plt.xlabel('Simulation step')
-plt.title('MPC')
+# plt.title('MPC')
 plt.show()
 # '''
 fig.add_subplot(2,2,4)
