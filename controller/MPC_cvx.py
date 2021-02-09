@@ -112,6 +112,7 @@ class MPC:
 
         if (self.Xub_soft is not None) or (self.Mub is not None):
             self.H = sci_la.block_diag(self.H,0*np.eye(self.nslack))
+            self.f = self.f.reshape(1,np.size(self.f))
             self.f = np.hstack([self.f, 1e8*np.ones((1, self.nslack))])
 
 
@@ -121,6 +122,7 @@ class MPC:
         Xlb < xi < Xub
         xi = zi[1:n,:]
         """
+        z0 = z0.reshape(np.size(z0),1)
         # input constraints
         Au_unit = np.vstack([np.eye(self.m),-np.eye(self.m)])
         Au = np.kron(np.eye(self.nh+1),Au_unit)
