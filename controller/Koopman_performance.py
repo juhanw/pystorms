@@ -50,7 +50,7 @@ class Koopman:
         rff_sigma_gaussian = np.std(states)
         num_features = int((self.nk - self.n- self.ncost)/2)
         # np.random.get_state()[1][0]
-        np.random.seed(878528420)
+        np.random.seed(878528420)  # 1536292545 1536292545
         self.rff_z = np.random.randn(self.n, num_features)/rff_sigma_gaussian
         print('Set up Random Fourier Features successfully!')
 
@@ -98,10 +98,10 @@ class Koopman:
         if metric_scale:
             if scale_down:
                 scaled = (data - self.metric_center)/self.metric_range
-                # scaled = 1.1* 1/(1+np.exp(-data))
+                # scaled = 2/(1+np.exp(-data)) - 1
             else:
                 scaled = data*self.metric_range + self.metric_center
-                # scaled = -np.log(1/data-1)
+                # scaled = -np.log(2/(data+1)-1)
         else:
             scaled = data
         return scaled
@@ -117,17 +117,17 @@ class Koopman:
         if state_scale:
             if scale_down:
                 scaled = (data - self.state_center) / self.state_range
-                # scaled = 1.1* 1/(1+np.exp(-data))
+                # scaled = 2/(1+np.exp(-data)) - 1
             else:
                 scaled = data*self.state_range + self.state_center
-                # scaled = -np.log(1/data-1)
+                # scaled = -np.log(2/(data+1)-1)
         else:
             if scale_down:
                 scaled = (data - self.action_center) / self.action_range
-                # scaled = 1.1* 1/(1+np.exp(-data))
+                # scaled = 2/(1+np.exp(-data)) - 1
             else:
                 scaled = data*self.action_range + self.action_center
-                # scaled = -np.log(1/data-1)
+                # scaled = -np.log(2/(data+1)-1)
         
         return scaled
 
