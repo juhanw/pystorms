@@ -55,6 +55,7 @@ class MPC:
         if Mub is not None:
             self.nmetric = np.size(Mub)
             self.nm0 = nm0
+            self.nmi = self.nmetric - self.nm0
             self.nslack += self.nmetric*(self.nh+1)
             if np.size(Mub) > 1:
                 self.Mub = Mub.reshape(self.nmetric,1)
@@ -89,29 +90,23 @@ class MPC:
         self.Su = np.vstack([np.zeros((self.nk,np.size(self.Su,1))), self.Su])
         self.Sz = np.vstack([np.eye(self.nk),self.Sz])
         
-        # Qunit = np.eye(self.nk)
-        # for i in range(self.nk):
-        #     if i != self.n:
-        #         Qunit[i,i] = 0
-        Qunit = np.eye(self.nmetric)
-        Qunit[-self.nm0:,-self.nm0:] = 1e9*np.eye(self.nm0)
+        Qunit = 0*np.eye(self.nk)
+        Qunit[self.n:self.n+self.nmi,self.n:self.n+self.nmi] = np.eye(self.nmi)
+        # Qunit[:self.n+self.nmi,:self.n+self.nmi] = np.eye(self.n+self.nmi)
         self.Q = np.kron(np.eye(self.nh),q*Qunit)
         self.Q = sci_la.block_diag(self.Q,qh*Qunit)
         self.R = np.kron(np.eye(self.nh+1),r*np.eye(self.m))
-        C = np.zeros((self.nmetric,self.nk))
-        if self.nmetric ==1:
-            C[:,self.n:self.n+self.nmetric] = 1
-        else:
-            C[:,self.n:self.n+self.nmetric] = np.eye(self.nmetric)
-            # C[self.nmetric-self.nm0:,self.n+self.nmetric-self.nm0:self.n+self.nmetric] = 1e9*np.eye(self.nm0)
+        C = np.eye(self.nk)
         self.Cbig = np.kron(np.eye(self.nh+1),C)
         CSu = np.matmul(self.Cbig,self.Su)
         self.H = np.matmul(CSu.T,np.matmul(self.Q,CSu)) + self.R
         calc_easy = np.matmul(self.Cbig,np.matmul(self.Sz,z0))
         self.f = 2*np.matmul(calc_easy.T,np.matmul(self.Q,CSu)) #row vector
-        # self.H = np.matmul(self.Su.T,np.matmul(self.Q,self.Su)) + self.R
-        # calc_easy = np.matmul(self.Sz,z0)
-        # self.f = 2*np.matmul(calc_easy.T,np.matmul(self.Q,self.Su)) #row vector
+        Qlin0 = np.zeros((1,self.nk))
+        Qlin0[:,self.n+self.nmi:self.n+self.nmetric] = 1e9*np.ones((1,self.nm0))
+        Qlin = np.kron(np.ones((1,self.nh)),q*Qlin0)
+        Qlin = np.hstack([Qlin,qh*Qlin0])
+        self.f += np.matmul(Qlin,CSu)
 
         if (self.Xub_soft is not None) or (self.Mub is not None):
             self.H = sci_la.block_diag(self.H,0*np.eye(self.nslack))

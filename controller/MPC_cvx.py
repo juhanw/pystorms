@@ -88,19 +88,12 @@ class MPC:
         self.Su = np.vstack([np.zeros((self.nk,np.size(self.Su,1))), self.Su])
         self.Sz = np.vstack([np.eye(self.nk),self.Sz])
         
-        # Qunit = np.eye(self.nk)
-        # for i in range(self.nk):
-        #     if i != self.n:
-        #         Qunit[i,i] = 0
-        Qunit = np.eye(self.nmetric)
+        Qunit = 0*np.eye(self.nk)
+        Qunit[self.n:self.n+self.nmetric,self.n:self.n+self.nmetric] = np.eye(self.nmetric)
         self.Q = np.kron(np.eye(self.nh),q*Qunit)
         self.Q = sci_la.block_diag(self.Q,qh*Qunit)
         self.R = np.kron(np.eye(self.nh+1),r*np.eye(self.m))
-        C = np.zeros((self.nmetric,self.nk))
-        if self.nmetric ==1:
-            C[:,self.n:self.n+self.nmetric] = 1
-        else:
-            C[:,self.n:self.n+self.nmetric] = np.eye(self.nmetric)
+        C = np.eye(self.nk)
         self.Cbig = np.kron(np.eye(self.nh+1),C)
         CSu = np.matmul(self.Cbig,self.Su)
         self.H = np.matmul(CSu.T,np.matmul(self.Q,CSu)) + self.R

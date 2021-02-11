@@ -40,13 +40,13 @@ Mlb = np.hstack([0*np.ones((1,11)),-1*np.ones((1,nm0))])
 
 t = 0
 counter = 0
-tmulti = 30
+tmulti = 3
 n_basis = 4
 n = Xub_extreme.size
 m = Uub.size
 ncost = 11
 nk = n + n_basis
-n0 = 250    #n0 > nk + m
+n0 = 100    #n0 > nk + m
 KPmodel = Koopman(Xub_extreme,Xlb_extreme,Uub,Ulb,Mub,Mlb,nk)
 Xub_scaled = KPmodel.scale(Xub_extreme)
 Xlb_scaled = KPmodel.scale(Xlb_extreme)
@@ -54,6 +54,7 @@ Uub_scaled = KPmodel.scale(Uub,state_scale=False)
 Ulb_scaled = KPmodel.scale(Ulb,state_scale=False)
 Mub_scaled = KPmodel.scale_lift(Mub)
 Mlb_scaled = KPmodel.scale_lift(Mlb)
+# KMPC = MPC(Uub_scaled,Ulb_scaled,Mub=Mub_scaled,Mlb=Mlb_scaled,n=n)
 KMPC = MPC(Uub_scaled,Ulb_scaled,Mub=Mub_scaled,Mlb=Mlb_scaled,n=n,nm0=nm0)
 # KMPC = MPC(Uub_scaled,Ulb_scaled, Xub_soft = Xub_scaled, Xlb_soft = Xlb_scaled)
 
@@ -136,19 +137,24 @@ while not done:
         actions = actions.T
         umpc = np.vstack((umpc,actions.reshape(1,np.size(umpc,1)) ))
         xkp_all = xkp[:-1,:]
-        qoi = t-n0-5*tmulti   # sequential 5 updates nrmse < 5% 
+        qoi = t-n0-10*tmulti   # sequential 5 updates nrmse < 5% 
         error = xtrue - xkp_all
         rmse_square = error[qoi:,:]**2
         rmse_each = np.sqrt(np.sum(rmse_square,0)/np.size(rmse_square,0))
         rmse_mean = np.mean(xtrue[qoi:,:],0)
         nrmse_each = rmse_each/rmse_mean * 100
         # NRMSE_predict = 100*np.sqrt(sum(np.linalg.norm(error[qoi:,:],axis=0)**2)) / np.sqrt(sum(np.linalg.norm(xtrue[qoi:,:],axis=0)**2))
-        if nrmse_each.any() < 0.5 and qoi > 0:
-            print(nrmse_each)
 
     print(t, "is time")
+    if t>n0 and qoi > 0:
+        temp = nrmse_each[rmse_mean>0.1]
+        if temp.max() < 10: 
+            print(t, "is time") # 3--204, 10--770,30--1606/2207, 100 -- 2364
+            print("updates", counter) # 3--34, 10--67,30-50/70, 100 -- 22
     t = t + 1
-    if t > 420:
+    if t > 500:
+        if nrmse_each[0] != nrmse_each[0]:
+            print("wrong")
         # break
         if nrmse_each.max() < 10:
             print(t, "is time") # 10--1002
@@ -169,7 +175,8 @@ colors_hex = colorpalette.as_hex()
 plt.rcParams['figure.figsize'] = [20, 15]
 plt.rcParams['figure.dpi'] = 100 # 200 e.g. is really fine, but slower
 xkp_all = xkp[:-1,:]
-qoi = t-n0-5*tmulti
+# qoi = t-n0-10*tmulti
+qoi = 0
 error = xtrue - xkp_all
 rmse_mean = np.mean(xtrue[qoi:,:],0)
 rmse_square = error[qoi:,:]**2
