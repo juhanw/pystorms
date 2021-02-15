@@ -1,6 +1,6 @@
 import numpy as np
-# change init in test!
-class Koopman:
+
+class DMD:
     def __init__(self, Xub, Xlb, Uub, Ulb, num_lift=2, weighting=0.96, Mub=None, Mlb=None):
         """
         potential improvements:
@@ -32,7 +32,7 @@ class Koopman:
             self.metric_range = (Mub - Mlb) / 2
             self.metric_center = (Mub + Mlb) / 2
             self.ncost = np.size(Mub)
-        self.nk = num_lift + self.ncost
+        self.nk = self.n + self.ncost
         print('Set up scale ranges and centers successfully!')
 
     def initialization(self, states, actions, costs=None):
@@ -46,14 +46,6 @@ class Koopman:
         Koopman library functions: RFF
         psi = [x; cost; liftx]
         """
-        # set rff:
-        rff_sigma_gaussian = np.std(states)
-        num_features = int((self.nk - self.n- self.ncost)/2)
-        # np.random.get_state()[1][0]
-        np.random.seed(878528420)  # 1536292545 1536292545
-        self.rff_z = np.random.randn(self.n, num_features)/rff_sigma_gaussian
-        print('Set up Random Fourier Features successfully!')
-
         states_scaled = self.scale(states)
         actions_scaled = self.scale(actions,state_scale=False)
         X_scaled = states_scaled[:-1,:]
@@ -66,16 +58,16 @@ class Koopman:
         self.Y = Weights*Y_scaled.T
         self.U = Weights*U_scaled.T
         if costs is None:
-            self.PsiX = self.lift(self.X.T)
-            self.PsiY = self.lift(self.Y.T)
+            self.PsiX = self.X
+            self.PsiY = self.Y
         else:
             costs_scaled = self.scale_lift(costs)
             CX_scaled = costs_scaled[:-1,:]
             CY_scaled = costs_scaled[1:,:]
             self.CX = Weights*CX_scaled.T
             self.CY = Weights*CY_scaled.T
-            self.PsiX = self.lift(self.X.T,self.CX.T)
-            self.PsiY = self.lift(self.Y.T,self.CY.T)
+            self.PsiX = np.vstack([self.X,self.CX])
+            self.PsiY = np.vstack([self.Y,self.CY])
         self.Zeta = np.vstack((self.PsiX,self.U))
         self.non_singular = 0.1
         self.Q = np.matmul(self.PsiY,self.Zeta.T)
@@ -135,34 +127,6 @@ class Koopman:
         
         return scaled
 
-    def lift(self, data, cost=None):
-        """
-        data is a Nt x N matrix
-        cost is a Nt x N matrix
-        return lifted states Nk x Nt matrix (s.t A*Psi)
-        lift the state space to a Koopman subspace
-        lifted = [states; (actions?); lift(states)]
-        RFF sampling rff_z ~ N(0, sigma^2*I_n)
-        """
-        if cost is not None:
-            if np.size(cost) == self.ncost:
-                cost = cost.reshape(1, np.size(cost))
-                data = data.reshape(1, np.size(data))
-        Q = np.matmul(data,self.rff_z)
-        Fcos = np.cos(Q)
-        Fsin = np.sin(Q)
-        F = np.hstack((Fcos, Fsin))/ np.sqrt(np.size(self.rff_z,1))
-        if cost is None:
-            Psi = np.hstack((data,F))
-        else:
-            if np.size(cost) == 1:
-                Psi = np.hstack((np.append(data,cost).reshape(1,self.n+self.ncost),F))
-            else:
-                Psi = np.hstack((data,cost,F))
-        Psi = Psi.T
-
-        return Psi
-
     def update(self, states_x, states_y, actions, costs_x=None, costs_y= None):
         """
         recursive update AB, G 
@@ -177,17 +141,18 @@ class Koopman:
         y_new = statesy_scaled.reshape(self.n,1)
         u_new = actions_scaled.reshape(self.m,1)
         if costs_x is None:
-            delta = np.vstack((self.lift(x_new.reshape(1,self.n)),u_new))
+            delta = np.vstack((x_new,u_new))
         else:
             costsx_scaled = self.scale_lift(costs_x)
             costsy_scaled = self.scale_lift(costs_y)
-            delta = np.vstack((self.lift(x_new.reshape(1,self.n),costsx_scaled),u_new))
+            delta = np.vstack([np.vstack([x_new,costsx_scaled]),u_new])
+
         calc_easy = np.matmul(self.G,delta)
         beta = 1/(1 + np.matmul(delta.T,calc_easy))
         if costs_x is None:
-            innovation = self.lift(y_new.reshape(1,self.n)) - np.matmul(self.AB,delta)
+            innovation = y_new - np.matmul(self.AB,delta)
         else:
-            innovation = self.lift(y_new.reshape(1,self.n),costsy_scaled) - np.matmul(self.AB,delta)
+            innovation = np.vstack([y_new,costsy_scaled]) - np.matmul(self.AB,delta)
         self.AB += beta*np.matmul(innovation,calc_easy.T)
         self.A = self.AB[:,:self.nk]
         if np.max(self.A) > 1000:
@@ -220,10 +185,10 @@ class Koopman:
         states_scaled = self.scale(states)
         actions_scaled = self.scale(actions,state_scale=False)
         if costs is None:
-            delta_new = np.vstack([self.lift(states_scaled),actions_scaled.reshape(self.m,1)])
+            delta_new = np.vstack([states_scaled.reshape(self.n,1),actions_scaled.reshape(self.m,1)])
         else:
             costs_scaled = self.scale_lift(costs)
-            delta_new = np.vstack([self.lift(states_scaled,costs_scaled),actions_scaled.reshape(self.m,1)])
+            delta_new = np.vstack([np.vstack([states_scaled.T,costs_scaled]),actions_scaled.reshape(self.m,1)])
         lift_predicted = np.matmul(self.AB,delta_new)
         predicts_scaled = np.matmul(self.C, lift_predicted)
         predicted = self.scale(predicts_scaled.reshape(1,self.n),scale_down=False)
