@@ -2,6 +2,7 @@
 import pystorms
 from MPC_smooth import MPC
 from Koopman_performance import Koopman
+from Koopman_liftCtrl import Koopman2
 from DMD_MIL import DMD
 # Python Scientific Computing Stack
 import numpy as np
@@ -34,10 +35,10 @@ tmulti = 50
 n_basis = 6
 n = Xub_extreme.size
 m = Uub.size
-nk = n + n_basis
-n0 = 300    #n0 > nk + m
-KPmodel = Koopman(Xub_extreme,Xlb_extreme,Uub,Ulb,nk)
-DMDmodel = DMD(Xub_extreme,Xlb_extreme,Uub,Ulb,nk)
+n0 = 20    #n0 > nk + m
+KPmodel = Koopman(Xub_extreme,Xlb_extreme,Uub,Ulb,n_basis)
+KCmodel = Koopman2(Xub_extreme,Xlb_extreme,Uub,Ulb,n_basis)
+DMDmodel = DMD(Xub_extreme,Xlb_extreme,Uub,Ulb,n_basis)
 Xub_scaled = KPmodel.scale(Xub_extreme)
 Xlb_scaled = KPmodel.scale(Xlb_extreme)
 Xub_allowed_scaled = KPmodel.scale(Xub_allowed)
@@ -69,16 +70,19 @@ while not done:
             # initialize Koopman model:
             A,B,C = KPmodel.initialization(x0,u)
             Admd, Bdmd, Cdmd = DMDmodel.initialization(x0,u)
+            ABc,Cc = KCmodel.initialization(x0,u)
             t1 = t
 
             # get control input
             z0 = KPmodel.lift(KPmodel.scale(x0[-1,:])) # x
             ulast_scaled = KPmodel.scale(u[-1,:],state_scale=False)
-            actions_mpc = KMPC.getMPC(z0,ulast_scaled,A,B,C)
-            if actions_mpc is None:
-                actions_mpc = u[-1,:]
-            actions = KPmodel.scale(actions_mpc,scale_down=False,state_scale=False)
-            actions = actions.T
+            # actions_mpc = KMPC.getMPC(z0,ulast_scaled,A,B,C)
+            # if actions_mpc is None:
+            #     actions_mpc = u[-1,:]
+            # actions = KPmodel.scale(actions_mpc,scale_down=False,state_scale=False)
+            # actions = actions.T
+            xc_new,uc_new = KCmodel.predict(x0[-1,:].reshape(1,5),u[-1,:].reshape(1,5))
+            actions = uc_new
             actions_north3.append(actions[4])
             actions_north2.append(actions[3])
             actions_north1.append(actions[2])
@@ -87,11 +91,13 @@ while not done:
             
             # initialize containers
             xtrue = x0[-1,:].reshape(1,5)
-            xkp = xtrue
-            xdmd = xtrue
             umpc = actions.reshape(1,5)
+            xkp = xtrue
             xkp = np.vstack((xkp,KPmodel.predict(xtrue,umpc) ))
+            xdmd = xtrue
             xdmd = np.vstack((xdmd,DMDmodel.predict(xtrue,umpc) ))
+            xc = xtrue
+            xc = np.vstack((xc, xc_new))
 
     else:
         done = env_equalfilling.step(umpc[-1,:])
@@ -101,14 +107,18 @@ while not done:
 
         if t-t1 == tmulti:
             # update Koopman model
-            A,B,C = KPmodel.update(xtrue[-1,:],xtrue[-2,:],umpc[-1,:])
+            A,B,C = KPmodel.update(xtrue[-2,:],xtrue[-1,:],umpc[-1,:])
             xkp_new = KPmodel.predict(xtrue[-1,:],umpc[-1,:]).reshape(1,np.size(xkp,1))
             xkp[-1,:] = xtrue[-1,:]
             xkp = np.vstack((xkp, xkp_new))
-            Admd,Bdmd,Cdmd = DMDmodel.update(xtrue[-1,:],xtrue[-2,:],umpc[-1,:])
+            Admd,Bdmd,Cdmd = DMDmodel.update(xtrue[-2,:],xtrue[-1,:],umpc[-1,:])
             xdmd_new = DMDmodel.predict(xtrue[-1,:],umpc[-1,:]).reshape(1,np.size(xdmd,1))
             xdmd[-1,:] = xtrue[-1,:]
             xdmd = np.vstack((xdmd, xdmd_new))
+            ABc,Cc = KCmodel.update(xtrue[-2,:],xtrue[-1,:],umpc[-2,:],umpc[-1,:])
+            xc_new,uc_new = KCmodel.predict(xtrue[-1,:],umpc[-1,:])
+            xc[-1,:] = xtrue[-1,:]
+            xc = np.vstack((xc, xc_new))
             # get control input
             z0 = KPmodel.lift(KPmodel.scale(xtrue[-1,:]))
             ulast_scaled = KPmodel.scale(umpc[-1,:],state_scale=False)
@@ -118,11 +128,14 @@ while not done:
             xkp = np.vstack((xkp, xkp_new))
             xdmd_new = DMDmodel.predict(xdmd[-1,:],umpc[-1,:]).reshape(1,np.size(xdmd,1))
             xdmd = np.vstack((xdmd, xdmd_new))
+            xc_new,uc_new = KCmodel.predict(xc[-1,:],umpc[-1,:])
+            xc = np.vstack((xc, xc_new))
             # get control input
             z0 = KPmodel.lift(KPmodel.scale(xkp[-1,:]))
             ulast_scaled = KPmodel.scale(umpc[-1,:],state_scale=False)
         
-        actions_mpc = KMPC.getMPC(z0,ulast_scaled,A,B,C)
+        # actions_mpc = KMPC.getMPC(z0,ulast_scaled,A,B,C)
+        actions_mpc = uc_new
         if actions_mpc is None:
             actions_mpc = umpc[-1,:]
         actions = KPmodel.scale(actions_mpc,scale_down=False,state_scale=False)
@@ -135,9 +148,11 @@ while not done:
         umpc = np.vstack((umpc,actions.reshape(1,np.size(umpc,1)) ))
         xkp_all = xkp[:-1,:]
         xdmd_all = xdmd[:-1,:]
-        qoi = t-50
+        xc_all = xc[:-1,:]
+        qoi = 0
         error = xtrue - xkp_all
         errDMD = xtrue - xdmd_all
+        errC = xtrue - xc_all
         rmse_square = error**2
         rmse_each = np.sqrt(np.sum(rmse_square,0)/np.size(rmse_square,0))
         rmse_mean = np.mean(xtrue,0)
@@ -148,7 +163,7 @@ while not done:
 
     print(t, "is time")
     t = t + 1
-    if t > 2000: #45957:
+    if t > 28000: #45957:
         # break
         print(t, "is time")
     
@@ -188,6 +203,17 @@ rmse_each = np.sqrt(np.sum(rmse_square)/np.size(rmse_square))
 rmse_mean = np.sqrt(np.sum(xtrue[ind]**2)/np.size(xtrue[ind]))
 nrmse_each2 = rmse_each/rmse_mean * 100
 print("DMD NRMSE = ",nrmse_each2,"%")
+# Koopman2 MIL NRMSE
+xc_all = xc[:-1,:]
+qoi = 0
+ind = xtrue > 0.001
+error = xtrue[ind] - xc_all[ind]
+rmse_mean = np.mean(xtrue[ind],0)
+rmse_square = error**2
+rmse_each = np.sqrt(np.sum(rmse_square)/np.size(rmse_square))
+rmse_mean = np.sqrt(np.sum(xtrue[ind]**2)/np.size(xtrue[ind]))
+nrmse_each3 = rmse_each/rmse_mean * 100
+print("Koopman2 NRMSE = ",nrmse_each3,"%")
 timeFromN0 = np.linspace(n0+1,t,t-n0)
 timeFromN0 = timeFromN0.astype(int)
 # Plot comparisons
@@ -195,13 +221,17 @@ plotenvironment = env_equalfilling
 label0 = "Ground Truth"
 label1 = "Koopman"
 label2 = "DMD"
-title = "NRMSE_Koopman = "+str(round(nrmse_each1,3))+"%, NRMSE_DMD = "+str(round(nrmse_each2,3))+"%, Sampling T = "+ str(tmulti)
-title += ", InitialDate size = " + str(int(n0))
+label3 = "Koopman2"
+title = "NRMSE_Koopman = "+str(round(nrmse_each1,3))
+title += "%, NRMSE_DMD = "+str(round(nrmse_each2,3))
+title += "%, NRMSE_Koopman2 = "+str(round(nrmse_each3,3))
+title += "%, Sampling T = "+ str(tmulti) + ", InitialDate size = " + str(int(n0))
 plt.suptitle(title, fontsize=10)
 plt.subplot(2, 3, 1)
 plt.plot(timeFromN0, xtrue[qoi:,0], color=colors_hex[0],label = label0)
 plt.plot(timeFromN0, xkp_all[qoi:,0], label = label1,color=colors_hex[2])
 plt.plot(timeFromN0, xdmd_all[qoi:,0], label = label2,color=colors_hex[1])
+plt.plot(timeFromN0, xc_all[qoi:,0], label = label3,color=colors_hex[3])
 plt.legend(loc="upper right", borderaxespad=0.1,prop={'size': 14})
 plt.xticks(fontsize=12)
 plt.yticks(fontsize=12)
@@ -218,6 +248,7 @@ plt.subplot(2, 3, 2)
 plt.plot(timeFromN0, xtrue[qoi:,1], color=colors_hex[0],label = label0)
 plt.plot(timeFromN0, xkp_all[qoi:,1], label = label1,color=colors_hex[2])
 plt.plot(timeFromN0, xdmd_all[qoi:,1], label = label2,color=colors_hex[1])
+plt.plot(timeFromN0, xc_all[qoi:,1], label = label3,color=colors_hex[3])
 plt.legend(loc="upper right", borderaxespad=0.1,prop={'size': 14})
 plt.xticks(fontsize=12)
 plt.yticks(fontsize=12)
@@ -232,6 +263,7 @@ plt.subplot(2, 3, 3)
 plt.plot(timeFromN0, xtrue[qoi:,2], color=colors_hex[0],label = label0)
 plt.plot(timeFromN0, xkp_all[qoi:,2], label = label1,color=colors_hex[2])
 plt.plot(timeFromN0, xdmd_all[qoi:,2], label = label2,color=colors_hex[1])
+plt.plot(timeFromN0, xc_all[qoi:,2], label = label3,color=colors_hex[3])
 plt.legend(loc="upper right", borderaxespad=0.1,prop={'size': 14})
 plt.xticks(fontsize=12)
 plt.yticks(fontsize=12)
@@ -248,6 +280,7 @@ plt.subplot(2, 3, 4)
 plt.plot(timeFromN0, xtrue[qoi:,3], color=colors_hex[0],label = label0)
 plt.plot(timeFromN0, xkp_all[qoi:,3], label = label1,color=colors_hex[2])
 plt.plot(timeFromN0, xdmd_all[qoi:,3], label = label2,color=colors_hex[1])
+plt.plot(timeFromN0, xc_all[qoi:,3], label = label3,color=colors_hex[3])
 plt.legend(loc="upper right", borderaxespad=0.1,prop={'size': 14})
 plt.xticks(fontsize=12)
 plt.yticks(fontsize=12)
@@ -264,6 +297,7 @@ plt.subplot(2, 3, 5)
 plt.plot(timeFromN0, xtrue[qoi:,4], color=colors_hex[0],label = label0)
 plt.plot(timeFromN0, xkp_all[qoi:,4], label = label1,color=colors_hex[2])
 plt.plot(timeFromN0, xdmd_all[qoi:,4], label = label2,color=colors_hex[1])
+plt.plot(timeFromN0, xc_all[qoi:,4], label = label3,color=colors_hex[3])
 plt.legend(loc="upper right", borderaxespad=0.1,prop={'size': 14})
 plt.xticks(fontsize=12)
 plt.yticks(fontsize=12)
@@ -279,10 +313,10 @@ plt.title("Basin North3")
 
 plt.subplot(2, 3, 6)
 plt.plot(actions_north3, label='North3 Weir', linestyle='-', linewidth=3.0)
-plt.plot(actions_north2, label='North2 Weir', linestyle='--', linewidth=2.0)
-plt.plot(actions_north1, label='North1 Weir', linestyle='--', linewidth=2.0)
+plt.plot(actions_north2, label='North2 Weir', linestyle='-', linewidth=2.0)
+plt.plot(actions_north1, label='North1 Weir', linestyle='-', linewidth=2.0)
 plt.plot(actions_central, label='Central Weir', linestyle='-', linewidth=2.0)
-plt.plot(actions_south, label='South Orifice', linestyle='-.', linewidth=2.0)
+plt.plot(actions_south, label='South Orifice', linestyle='-', linewidth=2.0)
 plt.ylim([-0.1,1.1])
 plt.legend(loc='upper right',prop={'size': 14})
 plt.xticks(fontsize=12)
