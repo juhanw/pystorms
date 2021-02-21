@@ -6,7 +6,7 @@ class MPC:
     """
     docstring
     """
-    def __init__(self, Uub=None, Ulb=None, Xub_soft=None, Xlb_soft=None, Xub_hard=None, Xlb_hard=None, num_horizon=5, Uslop=0.005, Usmooth=0.01):
+    def __init__(self, Uub=None, Ulb=None, Xub_soft=None, Xlb_soft=None, Xub_hard=None, Xlb_hard=None, num_horizon=5, Uslop=0.005, Usmooth=0.01,N = None):
         """
         X, U bounds have already been scaled down
         """
@@ -34,6 +34,7 @@ class MPC:
             self.nslack = self.n*(self.nh+1)
         else:
             self.Xub_soft = None
+            self.n = N
         if Xlb_soft is not None:
             self.Xlb_soft = Xlb_soft.reshape(self.n,1)
         else:

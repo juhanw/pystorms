@@ -57,16 +57,14 @@ class Koopman2:
         states_scaled = self.scale(states)
         actions_scaled = self.scale(actions,state_scale=False)
         X_scaled = states_scaled[:-1,:]
-        Y_scaled = states_scaled[1:,:]
-        U_scaled = actions_scaled[1:,:]
+        U_scaled = actions_scaled
         Nt = np.size(X_scaled,0)
         Weights = np.sqrt(self.weighting)**range(Nt-1,-1,-1)
         # Weights = Weights.reshape(Nt,1)
-        self.X = Weights*X_scaled.T
-        self.Y = Weights*Y_scaled.T
+        X = Weights*X_scaled.T
+        self.X = X[:,:-1]
+        self.Y = X[:,1:]
         self.U = Weights*U_scaled.T
-        self.X = self.X[:,:-1]
-        self.Y = self.Y[:,:-1]
         self.XU = np.vstack([self.X,self.U[:,:-1]])
         self.YU = np.vstack([self.Y,self.U[:,1:]])
         
@@ -76,12 +74,16 @@ class Koopman2:
         else:
             costs_scaled = self.scale_lift(costs)
             CX_scaled = costs_scaled[:-1,:]
-            CY_scaled = costs_scaled[1:,:]
-            self.CX = Weights*CX_scaled.T
-            self.CY = Weights*CY_scaled.T
+            if self.ncost == 1:
+                CX = np.multiply(Weights.reshape(len(Weights),1),CX_scaled)
+                self.CX = CX[:-1].T
+                self.CY = CX[1:].T
+            else:
+                self.CX = Weights*CX_scaled[:,:-1].T
+                self.CY = Weights*CX_scaled[:,1:].T
             self.PsiXU = self.lift(self.XU.T,self.CX.T)
             self.PsiYU = self.lift(self.YU.T,self.CY.T)
-        self.non_singular = 0.1
+        self.non_singular = 0.05
         self.Q = np.matmul(self.PsiYU,self.PsiXU.T)
         self.G = np.linalg.inv(np.matmul(self.PsiXU,self.PsiXU.T) + self.non_singular*np.eye(len(self.PsiXU)))
         # self.G = np.linalg.inv(np.matmul(self.Zeta,self.Zeta.T))
@@ -158,7 +160,7 @@ class Koopman2:
             Psi = np.hstack((data,F))
         else:
             if np.size(cost) == 1:
-                Psi = np.hstack((np.append(data,cost).reshape(1,self.n+self.ncost),F))
+                Psi = np.hstack((np.append(data,cost).reshape(1,self.n+self.m+self.ncost),F))
             else:
                 Psi = np.hstack((data,cost,F))
         Psi = Psi.T
@@ -188,19 +190,19 @@ class Koopman2:
         else:
             costsx_scaled = self.scale_lift(costs_x)
             costsy_scaled = self.scale_lift(costs_y)
-            delta = np.vstack((self.lift(x_new.reshape(1,self.n),costsx_scaled),u_new))
+            delta = self.lift(xu_new.reshape(1,self.n+self.m),costsx_scaled)
         calc_easy = np.matmul(self.G,delta)
         beta = 1/(1 + np.matmul(delta.T,calc_easy))
         if costs_x is None:
             innovation = self.lift(yu_new.reshape(1,self.n+self.m)) - np.matmul(self.AB,delta)
         else:
-            innovation = self.lift(y_new.reshape(1,self.n),costsy_scaled) - np.matmul(self.AB,delta)
+            innovation = self.lift(yu_new.reshape(1,self.n+self.m),costsy_scaled) - np.matmul(self.AB,delta)
         self.AB += beta*np.matmul(innovation,calc_easy.T)
         if np.max(self.AB) > 1000:
             print("SOmething wrong") # G has become negative definite det = -5e136 <-- calc_easy exp grow
         self.G = (self.G - beta*np.matmul(calc_easy,calc_easy.T))/self.weighting
         self.G = (self.G + self.G.T)/2
-        print(np.linalg.det(self.G))
+        # print(np.linalg.det(self.G))
         if np.linalg.det(self.G) < 0:
             temp = beta*np.matmul(calc_easy,calc_easy.T)
             rank = np.linalg.eigvals(temp)
@@ -227,7 +229,7 @@ class Koopman2:
             delta_new = self.lift(xu_scaled)
         else:
             costs_scaled = self.scale_lift(costs)
-            delta_new = np.vstack([self.lift(states_scaled,costs_scaled),actions_scaled.reshape(self.m,1)])
+            delta_new = self.lift(xu_scaled,costs_scaled)
         lift_predicted = np.matmul(self.AB,delta_new)
         predicted = self.scale(lift_predicted[:self.n].reshape(1,self.n),scale_down=False)
         # u_pred = self.scale(lift_predicted[self.n:self.n+self.m].reshape(1,self.n),scale_down=False,state_scale=False)

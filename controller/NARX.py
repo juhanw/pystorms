@@ -1,6 +1,6 @@
 import numpy as np
-
-class DMD:
+# change init in test!
+class NARX:
     def __init__(self, Xub, Xlb, Uub, Ulb, num_lift=2, weighting=0.96, Mub=None, Mlb=None):
         """
         potential improvements:
@@ -32,7 +32,7 @@ class DMD:
             self.metric_range = (Mub - Mlb) / 2
             self.metric_center = (Mub + Mlb) / 2
             self.ncost = np.size(Mub)
-        self.nk = self.n + self.ncost
+        self.nk = num_lift + self.n + self.ncost
         print('Set up scale ranges and centers successfully!')
 
     def initialization(self, states, actions, costs=None):
@@ -46,6 +46,14 @@ class DMD:
         Koopman library functions: RFF
         psi = [x; cost; liftx]
         """
+        # set rff:
+        rff_sigma_gaussian = np.std(states)
+        num_features = int((self.nk - self.n- self.ncost)/2)
+        # np.random.get_state()[1][0]
+        np.random.seed(878528420)  # 1536292545 1536292545
+        self.rff_z = np.random.randn(self.n, num_features)/rff_sigma_gaussian
+        print('Set up Random Fourier Features successfully!')
+
         states_scaled = self.scale(states)
         actions_scaled = self.scale(actions,state_scale=False)
         X_scaled = states_scaled[:-1,:]
@@ -58,37 +66,39 @@ class DMD:
         self.Y = Weights*Y_scaled.T
         self.U = Weights*U_scaled.T
         if costs is None:
-            self.PsiX = self.X
-            self.PsiY = self.Y
+            self.PsiX = self.lift(self.X.T).T
+            self.Zeta = np.hstack((self.PsiX,self.U.T))
+            self.non_singular = 0.1
+            self.Q = np.matmul(self.Zeta.T,self.Y.T)
         else:
             costs_scaled = self.scale_lift(costs)
             CX_scaled = costs_scaled[:-1,:]
             CY_scaled = costs_scaled[1:,:]
             if self.ncost == 1:
-                self.CX = np.multiply(Weights.reshape(len(Weights),1),CX_scaled).T
-                self.CY = np.multiply(Weights.reshape(len(Weights),1),CY_scaled).T
+                self.CX = np.multiply(Weights.reshape(len(Weights),1),CX_scaled)
+                self.CY = np.multiply(Weights.reshape(len(Weights),1),CY_scaled)
             else:
                 self.CX = Weights*CX_scaled.T
                 self.CY = Weights*CY_scaled.T
-            self.PsiX = np.vstack([self.X,self.CX])
-            self.PsiY = np.vstack([self.Y,self.CY])
-        self.Zeta = np.vstack((self.PsiX,self.U))
-        self.non_singular = 0.05
-        self.Q = np.matmul(self.PsiY,self.Zeta.T)
-        self.G = np.linalg.inv(np.matmul(self.Zeta,self.Zeta.T) + self.non_singular*np.eye(len(self.Zeta)))
+            self.PsiX = self.lift(self.X.T,self.CX).T
+            self.YCY = np.hstack([self.Y.T,self.CY])
+            self.Zeta = np.hstack((self.PsiX,self.U.T))
+            self.non_singular = 0.05
+            self.Q = np.matmul(self.Zeta.T,self.YCY)
+        self.G = np.linalg.inv(np.matmul(self.Zeta.T,self.Zeta) + self.non_singular*np.eye(np.size(self.Zeta,1)))
         # self.G = np.linalg.inv(np.matmul(self.Zeta,self.Zeta.T))
-        self.AB = np.matmul(self.Q,self.G)
-        self.A = self.AB[:,:self.nk]
-        self.B = self.AB[:,self.nk:]
-        self.C = np.hstack((np.eye(self.n),np.zeros((self.n,self.nk-self.n))))
+        self.Theta = np.matmul(self.G,self.Q)
         self.G = self.G /self.weighting
         self.G = (self.G + self.G.T)/2
         # Evaluate regression accuracy:
-        error = self.Y - np.matmul(self.C,np.matmul(self.AB,self.Zeta))
-        NRMSE_Koopman = 100*np.sqrt(sum(np.linalg.norm(error,axis=0)**2)) / np.sqrt(sum(np.linalg.norm(self.Y,axis=0)**2))
+        if costs is None:
+            error = self.Y.T - np.matmul(self.Zeta,self.Theta)
+            NRMSE_Koopman = 100*np.sqrt(sum(np.linalg.norm(error,axis=0)**2)) / np.sqrt(sum(np.linalg.norm(self.Y.T,axis=0)**2))
+        else:
+            error = self.YCY - np.matmul(self.Zeta,self.Theta)
+            NRMSE_Koopman = 100*np.sqrt(sum(np.linalg.norm(error,axis=0)**2)) / np.sqrt(sum(np.linalg.norm(self.YCY,axis=0)**2))
         print(NRMSE_Koopman,"%")
-
-        return self.A, self.B, self.C
+        return self.Theta
 
     def scale_lift(self,data, scale_down=True,metric_scale=True):
         '''
@@ -131,6 +141,34 @@ class DMD:
         
         return scaled
 
+    def lift(self, data, cost=None):
+        """
+        data is a Nt x N matrix
+        cost is a Nt x N matrix
+        return lifted states Nk x Nt matrix (s.t A*Psi)
+        lift the state space to a Koopman subspace
+        lifted = [states; (actions?); lift(states)]
+        RFF sampling rff_z ~ N(0, sigma^2*I_n)
+        """
+        if cost is not None:
+            if np.size(cost) == self.ncost:
+                cost = cost.reshape(1, np.size(cost))
+                data = data.reshape(1, np.size(data))
+        Q = np.matmul(data,self.rff_z)
+        Fcos = np.cos(Q)
+        Fsin = np.sin(Q)
+        F = np.hstack((Fcos, Fsin))/ np.sqrt(np.size(self.rff_z,1))
+        if cost is None:
+            Psi = np.hstack((data,F))
+        else:
+            if np.size(cost) == 1:
+                Psi = np.hstack((np.append(data,cost).reshape(1,self.n+self.ncost),F))
+            else:
+                Psi = np.hstack((data,cost,F))
+        Psi = Psi.T
+
+        return Psi
+
     def update(self, states_x, states_y, actions, costs_x=None, costs_y= None):
         """
         recursive update AB, G 
@@ -141,27 +179,23 @@ class DMD:
         statesx_scaled = self.scale(states_x.reshape(1,self.n))
         statesy_scaled = self.scale(states_y.reshape(1,self.n))
         actions_scaled = self.scale(actions.reshape(1,self.m),state_scale=False)
-        x_new = statesx_scaled.reshape(self.n,1)
-        y_new = statesy_scaled.reshape(self.n,1)
-        u_new = actions_scaled.reshape(self.m,1)
+        x_new = statesx_scaled.reshape(1,self.n)
+        y_new = statesy_scaled.reshape(1,self.n)
+        u_new = actions_scaled.reshape(1,self.m)
         if costs_x is None:
-            delta = np.vstack((x_new,u_new))
+            delta = np.vstack((self.lift(x_new),u_new.T))
         else:
             costsx_scaled = self.scale_lift(costs_x)
             costsy_scaled = self.scale_lift(costs_y)
-            delta = np.vstack([np.vstack([x_new,costsx_scaled]),u_new])
-
+            delta = np.vstack((self.lift(x_new,costsx_scaled),u_new.T))
         calc_easy = np.matmul(self.G,delta)
         beta = 1/(1 + np.matmul(delta.T,calc_easy))
         if costs_x is None:
-            innovation = y_new - np.matmul(self.AB,delta)
+            innovation = y_new.reshape(1,self.n) - np.matmul(delta.T,self.Theta)
         else:
-            innovation = np.vstack([y_new,costsy_scaled]) - np.matmul(self.AB,delta)
-        self.AB += beta*np.matmul(innovation,calc_easy.T)
-        self.A = self.AB[:,:self.nk]
-        if np.max(self.A) > 1000:
-            print("SOmething wrong") # G has become negative definite det = -5e136 <-- calc_easy exp grow
-        self.B = self.AB[:,self.nk:]
+            ycy_new = np.append(y_new,costsy_scaled).reshape(1,self.n + self.ncost)
+            innovation = ycy_new - np.matmul(delta.T,self.Theta)
+        self.Theta += beta*np.matmul(calc_easy,innovation)
         self.G = (self.G - beta*np.matmul(calc_easy,calc_easy.T))/self.weighting
         self.G = (self.G + self.G.T)/2
         # print(np.linalg.det(self.G))
@@ -169,16 +203,16 @@ class DMD:
             temp = beta*np.matmul(calc_easy,calc_easy.T)
             rank = np.linalg.eigvals(temp)
             print(min(rank))
-            GG = np.linalg.inv(np.matmul(self.Zeta,self.Zeta.T) + self.non_singular*np.eye(len(self.Zeta)))
+            GG = np.linalg.inv(np.matmul(self.Zeta.T,self.Zeta) + self.non_singular*np.eye(np.size(self.Zeta,1)))
             GG = GG /self.weighting
             GG = (GG + GG.T)/2
             self.G = GG
         
-        self.X = np.hstack((self.X,x_new))
-        self.Y = np.hstack((self.Y,y_new))
-        self.U= np.hstack((self.U,u_new))
-        self.Zeta = np.hstack((self.Zeta,delta))
-        return self.A, self.B, self.C
+        self.X = np.hstack((self.X,x_new.T))
+        self.Y = np.hstack((self.Y,y_new.T))
+        self.U= np.hstack((self.U,u_new.T))
+        self.Zeta = np.vstack((self.Zeta,delta.T))
+        return self.Theta
 
     def predict(self, states, actions, costs=None):
         """
@@ -189,12 +223,11 @@ class DMD:
         states_scaled = self.scale(states)
         actions_scaled = self.scale(actions,state_scale=False)
         if costs is None:
-            delta_new = np.vstack([states_scaled.reshape(self.n,1),actions_scaled.reshape(self.m,1)])
+            delta_new = np.hstack([self.lift(states_scaled).T,actions_scaled.reshape(1,self.m)])
         else:
             costs_scaled = self.scale_lift(costs)
-            delta_new = np.vstack([np.vstack([states_scaled.T,costs_scaled]),actions_scaled.reshape(self.m,1)])
-        lift_predicted = np.matmul(self.AB,delta_new)
-        predicts_scaled = np.matmul(self.C, lift_predicted)
-        predicted = self.scale(predicts_scaled.reshape(1,self.n),scale_down=False)
+            delta_new = np.hstack([self.lift(states_scaled,costs_scaled).T,actions_scaled.reshape(1,self.m)])
+        y_predicted = np.matmul(delta_new,self.Theta)
+        predicted = self.scale(y_predicted[:,:self.n],scale_down=False)
 
         return predicted
